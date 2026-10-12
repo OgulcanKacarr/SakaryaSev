@@ -53,6 +53,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     await settings.loadWebhookUrl();
     await settings.loadBuses();
     await settings.loadTrips();
+    await settings.loadSpeedViolationSetting();
 
     _webhookService = WebhookService(
       webhookUrl: "https://www.sakaryasevturizm.com/acswhook",
@@ -72,12 +73,138 @@ class _HomePageState extends ConsumerState<HomePage> {
     final settings = ref.read(settingsProvider);
     final home = ref.read(homeProvider);
 
-    final vehicleId = data["violation"]["vehicle"]["_id"] as String;
-    final summary = data["summary"] as String;
+    final violation = data["violation"];
+
+    if (violation is! Map) return;
+
+    // ------------------------------------------------------------
+    // 1. HIZ İHLALİ WEBHOOK'U
+    // ------------------------------------------------------------
+
+    final alarmRule = data["alarmRule"];
+    final isSpeedViolation =
+        alarmRule is Map &&
+            violation["measurement"] is Map &&
+            (violation["measurement"] as Map)["speed"] != null;
+
+    if (isSpeedViolation) {
+      final vehicle = violation["vehicle"];
+      final measurement = violation["measurement"] as Map;
+      final rule = (alarmRule)["rule"];
+      final threshold = rule is Map ? rule["threshold"] : null;
+      final speedThreshold =
+      threshold is Map ? threshold["speed"] : null;
+      final latest =
+      speedThreshold is Map ? speedThreshold["latest"] : null;
+      final limitData = latest is Map ? latest["limit"] : null;
+
+      final vehicleId =
+      vehicle is Map ? vehicle["_id"]?.toString() ?? "" : "";
+
+      final speedRaw = measurement["speed"];
+      final limitRaw =
+      limitData is Map ? limitData["moreThan"] : null;
+
+      final speed = speedRaw is num
+          ? speedRaw.toDouble()
+          : double.tryParse(speedRaw?.toString() ?? "");
+
+      final limit = limitRaw is num
+          ? limitRaw.toDouble()
+          : double.tryParse(limitRaw?.toString() ?? "");
+
+      if (speed == null || limit == null) {
+        debugPrint("Hız ihlali: hız veya limit bilgisi eksik.");
+        return;
+      }
+
+      final summary = data["summary"]?.toString() ?? "";
+      var plate = home.extractPlate(summary);
+
+      // Önce kayıtlı araçların Trio ID eşleşmesini kullan.
+      BusModel? bus;
+
+      try {
+        bus = settings.buses.firstWhere(
+              (e) => e.vehicleId == vehicleId && vehicleId.isNotEmpty,
+        );
+      } catch (_) {
+        bus = null;
+      }
+
+      // ID eşleşmesi bulunamadıysa özetteki plakayı kullan.
+      if (bus == null && plate.isNotEmpty) {
+        try {
+          bus = settings.buses.firstWhere(
+                (e) => e.plate.toUpperCase() == plate.toUpperCase(),
+          );
+        } catch (_) {
+          bus = null;
+        }
+      }
+
+      if (bus != null) {
+        plate = bus.plate;
+
+        // Araç ID'si henüz kayıtlı değilse eşleştirmeyi kaydet.
+        if (vehicleId.isNotEmpty && bus.vehicleId != vehicleId) {
+          await settings.updateVehicleId(
+            plate: bus.plate,
+            vehicleId: vehicleId,
+          );
+        }
+      }
+
+      if (plate.isEmpty) {
+        debugPrint(
+          "Hız ihlali geldi ancak araç plakası eşleştirilemedi. "
+              "Trio Vehicle ID: $vehicleId",
+        );
+        return;
+      }
+
+      final speedText =
+      speed.toStringAsFixed(speed % 1 == 0 ? 0 : 1);
+      final limitText =
+      limit.toStringAsFixed(limit % 1 == 0 ? 0 : 1);
+
+      final alertText =
+          "Dikkat! $plate plakalı araç, "
+          "$limitText kilometre/saat hız sınırını aşarak "
+          "saatte $speedText kilometre hızla seyrediyor.";
+
+      debugPrint("Hız ihlali: $alertText");
+
+      if (settings.notification) {
+        await _notificationService.show(
+          title: "Hız İhlali - $plate",
+          body: alertText,
+        );
+      }
+
+      // Hız ihlali, normal bölge anonsundan bağımsız kontrol edilir.
+      if (settings.speakSpeedViolations) {
+        await _ttsService.speak(
+          text: alertText,
+          voiceType: settings.voiceType,
+        );
+      }
+
+      return;
+    }
+
+    // ------------------------------------------------------------
+    // 2. MEVCUT BÖLGE WEBHOOK'U
+    // ------------------------------------------------------------
+
+    final vehicle = violation["vehicle"];
+    final vehicleId =
+    vehicle is Map ? vehicle["_id"]?.toString() ?? "" : "";
+    final summary = data["summary"]?.toString() ?? "";
 
     final plate = home.extractPlate(summary);
 
-    if (plate.isNotEmpty) {
+    if (plate.isNotEmpty && vehicleId.isNotEmpty) {
       await settings.updateVehicleId(
         plate: plate,
         vehicleId: vehicleId,
@@ -100,13 +227,17 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     try {
       bus = settings.buses.firstWhere(
-            (e) => e.plate.toUpperCase() == announcement.plate.toUpperCase(),
+            (e) =>
+        e.plate.toUpperCase() ==
+            announcement.plate.toUpperCase(),
       );
     } catch (_) {
       bus = null;
     }
 
-    if (bus != null && bus.speakNote && bus.note.trim().isNotEmpty) {
+    if (bus != null &&
+        bus.speakNote &&
+        bus.note.trim().isNotEmpty) {
       text += " Not. ${bus.note}";
     }
 
@@ -124,6 +255,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
   }
+
 
   @override
   void dispose() {

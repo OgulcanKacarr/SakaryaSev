@@ -29,6 +29,9 @@ class SettingsPageViewModel extends ChangeNotifier {
   String webhookUrl = "https://www.sakaryasevturizm.com/acswhook";
   List<AssistantModel> assistants = [];
 
+
+  bool speakSpeedViolations = false;
+
   void setSpeakDriver(bool value) {
     speakDriver = value;
     notifyListeners();
@@ -61,6 +64,25 @@ class SettingsPageViewModel extends ChangeNotifier {
 
   void setVoiceType(String value) {
     voiceType = value;
+    notifyListeners();
+  }
+
+  Future<void> loadSpeedViolationSetting() async {
+    speakSpeedViolations = await SharedPrefService.readBool(
+      "speakSpeedViolations",
+    );
+
+    notifyListeners();
+  }
+
+  Future<void> setSpeakSpeedViolations(bool value) async {
+    speakSpeedViolations = value;
+
+    await SharedPrefService.saveBool(
+      "speakSpeedViolations",
+      value,
+    );
+
     notifyListeners();
   }
 

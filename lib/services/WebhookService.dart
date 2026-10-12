@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 class WebhookService {
   String webhookUrl;
-  String? authKey; // Auth-Key alanı eklendi
+  String? authKey;
 
   Timer? _timer;
   final Set<String> _processedIds = {};

@@ -42,6 +42,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       vm.loadDrivers();
       vm.loadAssistants();
       vm.loadWebhookUrl();
+      vm.loadSpeedViolationSetting();
 
       _initialized = true;
     }
@@ -1738,7 +1739,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               value: vm.voice,
               onChanged: vm.setVoice,
             ),
-
+            SwitchListTile(
+              title: const Text("Hız İhlallerini Seslendir"),
+              value: vm.speakSpeedViolations,
+              onChanged: vm.setSpeakSpeedViolations,
+            ),
             SwitchListTile(
               title: const Text("Şoförü Seslendir"),
               value: vm.speakDriver,
@@ -1792,6 +1797,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               opacity: 0.5,
               child: Text(
                 "Created by Oğulcan KAÇAR",
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+            ),
+            const Opacity(
+              opacity: 0.5,
+              child: Text(
+                "https://www.github.com/OgulcanKacarr",
                 style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
               ),
             ),
