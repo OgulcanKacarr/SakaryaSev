@@ -45,7 +45,14 @@ class SharedPrefService {
     bool? value = sharedPreferences.getBool(name);
     return value ?? true;
   }
-
+// Varsayılan değeri belirlenebilen Boolean veriyi oku
+  static Future<bool> readBoolWithDefault(
+      String name, {
+        required bool defaultValue,
+      }) async {
+    final sharedPreferences = await SharedPreferences.getInstance();
+    return sharedPreferences.getBool(name) ?? defaultValue;
+  }
   // Double veriyi kaydet
   static Future<void> saveDouble(BuildContext context, String name, double data) async {
     SharedPreferences sharedPreferences = await SharedPreferences.getInstance();

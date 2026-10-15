@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/AnnouncementModel.dart';
@@ -8,7 +9,9 @@ import '../../models/BusAssignmentModel.dart';
 import '../../models/BusModel.dart';
 import '../../models/DriverModel.dart';
 import '../../models/TripModel.dart';
+import '../../services/NotificationService.dart';
 import '../../services/SharedPrefService.dart';
+import '../../services/TtsService.dart';
 
 class SettingsPageViewModel extends ChangeNotifier {
   List<BusModel> buses = [];
@@ -31,6 +34,13 @@ class SettingsPageViewModel extends ChangeNotifier {
 
 
   bool speakSpeedViolations = false;
+  final TtsService _testTtsService = TtsService();
+  final NotificationService _testNotificationService =
+  NotificationService();
+
+  bool testingVoice = false;
+  bool testingNotification = false;
+
 
   void setSpeakDriver(bool value) {
     speakDriver = value;
@@ -68,8 +78,10 @@ class SettingsPageViewModel extends ChangeNotifier {
   }
 
   Future<void> loadSpeedViolationSetting() async {
-    speakSpeedViolations = await SharedPrefService.readBool(
+    speakSpeedViolations =
+    await SharedPrefService.readBoolWithDefault(
       "speakSpeedViolations",
+      defaultValue: false,
     );
 
     notifyListeners();
@@ -84,6 +96,48 @@ class SettingsPageViewModel extends ChangeNotifier {
     );
 
     notifyListeners();
+  }
+
+  Future<void> testSpeedVoice() async {
+    if (testingVoice) return;
+
+    testingVoice = true;
+    notifyListeners();
+
+    try {
+      await _testTtsService.speak(
+        text: 'Dikkat! 54 E 7685 plakalı araç '
+            '92 kilometre hızla 90 kilometre hız sınırını aştı.',
+        voiceType: voiceType,
+      );
+    } finally {
+      testingVoice = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> testDesktopNotification() async {
+    if (testingNotification) return;
+
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Windows bildirimi için uygulamayı Windows masaüstünde çalıştırın.',
+      );
+    }
+
+    testingNotification = true;
+    notifyListeners();
+
+    try {
+      await _testNotificationService.show(
+        title: 'Hız İhlali Testi',
+        body: '54 E 7685 plakalı araç 92 km/sa hızla '
+            '90 km/sa hız sınırını aştı.',
+      );
+    } finally {
+      testingNotification = false;
+      notifyListeners();
+    }
   }
 
   Future<void> setWebhookUrl(String value) async {

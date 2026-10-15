@@ -1744,6 +1744,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               value: vm.speakSpeedViolations,
               onChanged: vm.setSpeakSpeedViolations,
             ),
+
+
             SwitchListTile(
               title: const Text("Şoförü Seslendir"),
               value: vm.speakDriver,
@@ -1790,7 +1792,103 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 }
               },
             ),
+            const SizedBox(height: 12),
 
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Test İşlemleri',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  FilledButton.tonalIcon(
+                    onPressed: vm.testingVoice
+                        ? null
+                        : () async {
+                      try {
+                        await vm.testSpeedVoice();
+
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Seslendirme testi tamamlandı.'),
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+
+                          debugPrint('Seslendirme hatası: $e');
+
+                      }
+                    },
+                    icon: vm.testingVoice
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.record_voice_over),
+                    label: Text(
+                      vm.testingVoice
+                          ? 'Seslendiriliyor...'
+                          : 'Test Seslendirmesi',
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  FilledButton.tonalIcon(
+                    onPressed: vm.testingNotification
+                        ? null
+                        : () async {
+                      try {
+                        await vm.testDesktopNotification();
+
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Bildirim testi gönderildi.'),
+                          ),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Bildirim hatası: $e'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: vm.testingNotification
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.notifications_active_outlined),
+                    label: Text(
+                      vm.testingNotification
+                          ? 'Gönderiliyor...'
+                          : 'Test Bildirimi',
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 30),
 
             const Opacity(

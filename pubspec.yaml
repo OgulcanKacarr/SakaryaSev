@@ -56,10 +56,12 @@ dependencies:
   go_router: ^17.3.0
   dio: ^5.10.0
   flutter_edge_tts: ^0.0.2
+  edge_tts: ^0.1.5
   local_notifier: ^0.1.6
   async: ^2.13.1
   share_plus: ^10.0.0
   url_launcher: ^6.3.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

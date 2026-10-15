@@ -55,10 +55,19 @@ class _HomePageState extends ConsumerState<HomePage> {
     await settings.loadTrips();
     await settings.loadSpeedViolationSetting();
 
+    _beklet(){
+      _webhookService = WebhookService(
+        webhookUrl: "https://www.sakaryasevturizm.com/acswhook",
+        authKey: "362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c",
+      );
+    }
+
+
     _webhookService = WebhookService(
-      webhookUrl: "https://www.sakaryasevturizm.com/acswhook",
+      webhookUrl: "http://localhost/speed_test/speed_test_webhook.php",
       authKey: "362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c",
     );
+
 
     _webhookService!.start(
       onReceive: _handleWebhookData,
@@ -67,144 +76,118 @@ class _HomePageState extends ConsumerState<HomePage> {
     _startManualArrivalChecker();
   }
 
-  Future<void> _handleWebhookData(
-      Map<String, dynamic> data,
-      ) async {
+
+  Future<void> _handleWebhookData(Map<String, dynamic> data) async {
     final settings = ref.read(settingsProvider);
     final home = ref.read(homeProvider);
 
-    final violation = data["violation"];
-
+    final violation = data['violation'];
     if (violation is! Map) return;
 
-    // ------------------------------------------------------------
-    // 1. HIZ İHLALİ WEBHOOK'U
-    // ------------------------------------------------------------
+    final measurement = violation['measurement'];
 
-    final alarmRule = data["alarmRule"];
-    final isSpeedViolation =
-        alarmRule is Map &&
-            violation["measurement"] is Map &&
-            (violation["measurement"] as Map)["speed"] != null;
-
-    if (isSpeedViolation) {
-      final vehicle = violation["vehicle"];
-      final measurement = violation["measurement"] as Map;
-      final rule = (alarmRule)["rule"];
-      final threshold = rule is Map ? rule["threshold"] : null;
-      final speedThreshold =
-      threshold is Map ? threshold["speed"] : null;
-      final latest =
-      speedThreshold is Map ? speedThreshold["latest"] : null;
-      final limitData = latest is Map ? latest["limit"] : null;
-
+    // HIZ İHLALİ
+    if (measurement is Map && measurement['speed'] != null) {
+      final vehicle = violation['vehicle'];
       final vehicleId =
-      vehicle is Map ? vehicle["_id"]?.toString() ?? "" : "";
+      vehicle is Map ? vehicle['_id']?.toString() ?? '' : '';
 
-      final speedRaw = measurement["speed"];
-      final limitRaw =
-      limitData is Map ? limitData["moreThan"] : null;
+      final summary = data['summary']?.toString() ?? '';
+      final plateFromSummary = home.extractPlate(summary);
 
-      final speed = speedRaw is num
-          ? speedRaw.toDouble()
-          : double.tryParse(speedRaw?.toString() ?? "");
+      final alarmRule = data['alarmRule'];
+      final rule = alarmRule is Map ? alarmRule['rule'] : null;
+      final threshold = rule is Map ? rule['threshold'] : null;
+      final speedRule =
+      threshold is Map ? threshold['speed'] : null;
+      final latest = speedRule is Map ? speedRule['latest'] : null;
+      final limitData =
+      latest is Map ? latest['limit'] : null;
+      final limit =
+      limitData is Map ? limitData['moreThan'] : null;
 
-      final limit = limitRaw is num
-          ? limitRaw.toDouble()
-          : double.tryParse(limitRaw?.toString() ?? "");
+      final speed = measurement['speed'];
 
-      if (speed == null || limit == null) {
-        debugPrint("Hız ihlali: hız veya limit bilgisi eksik.");
+      if (speed is! num || limit is! num) {
+        debugPrint('Hız ihlali verisi eksik: hız veya limit bulunamadı.');
         return;
       }
 
-      final summary = data["summary"]?.toString() ?? "";
-      var plate = home.extractPlate(summary);
-
-      // Önce kayıtlı araçların Trio ID eşleşmesini kullan.
       BusModel? bus;
 
+      // Önce Trio araç ID'siyle eşleştir.
       try {
         bus = settings.buses.firstWhere(
-              (e) => e.vehicleId == vehicleId && vehicleId.isNotEmpty,
+              (b) => b.vehicleId.isNotEmpty &&
+              b.vehicleId == vehicleId,
         );
       } catch (_) {
         bus = null;
       }
 
-      // ID eşleşmesi bulunamadıysa özetteki plakayı kullan.
-      if (bus == null && plate.isNotEmpty) {
+      // ID eşleşmezse plakayla eşleştir.
+      if (bus == null && plateFromSummary.isNotEmpty) {
         try {
           bus = settings.buses.firstWhere(
-                (e) => e.plate.toUpperCase() == plate.toUpperCase(),
+                (b) =>
+            b.plate.toUpperCase() ==
+                plateFromSummary.toUpperCase(),
           );
         } catch (_) {
           bus = null;
         }
       }
 
-      if (bus != null) {
-        plate = bus.plate;
-
-        // Araç ID'si henüz kayıtlı değilse eşleştirmeyi kaydet.
-        if (vehicleId.isNotEmpty && bus.vehicleId != vehicleId) {
-          await settings.updateVehicleId(
-            plate: bus.plate,
-            vehicleId: vehicleId,
-          );
-        }
-      }
+      final plate = bus?.plate ?? plateFromSummary;
 
       if (plate.isEmpty) {
-        debugPrint(
-          "Hız ihlali geldi ancak araç plakası eşleştirilemedi. "
-              "Trio Vehicle ID: $vehicleId",
-        );
+        debugPrint('Hız ihlalinde araç plakası bulunamadı.');
         return;
       }
 
-      final speedText =
-      speed.toStringAsFixed(speed % 1 == 0 ? 0 : 1);
-      final limitText =
-      limit.toStringAsFixed(limit % 1 == 0 ? 0 : 1);
-
-      final alertText =
-          "Dikkat! $plate plakalı araç, "
-          "$limitText kilometre/saat hız sınırını aşarak "
-          "saatte $speedText kilometre hızla seyrediyor.";
-
-      debugPrint("Hız ihlali: $alertText");
-
-      if (settings.notification) {
-        await _notificationService.show(
-          title: "Hız İhlali - $plate",
-          body: alertText,
+      if (vehicleId.isNotEmpty &&
+          bus != null &&
+          bus.vehicleId != vehicleId) {
+        await settings.updateVehicleId(
+          plate: plate,
+          vehicleId: vehicleId,
         );
       }
 
-      // Hız ihlali, normal bölge anonsundan bağımsız kontrol edilir.
+      final speedText = speed.toStringAsFixed(0);
+      final limitText = limit.toStringAsFixed(0);
+
+      final text =
+          'Dikkat! $plate plakalı araç, '
+          '$limitText kilometre/saat hız sınırını aşarak '
+          'saatte $speedText kilometre hızla seyrediyor.';
+
+      if (settings.notification) {
+        await _notificationService.show(
+          title: 'Hız İhlali - $plate',
+          body: text,
+        );
+      }
+
       if (settings.speakSpeedViolations) {
         await _ttsService.speak(
-          text: alertText,
+          text: text,
           voiceType: settings.voiceType,
         );
       }
 
+      debugPrint('Hız ihlali işlendi: $text');
       return;
     }
 
-    // ------------------------------------------------------------
-    // 2. MEVCUT BÖLGE WEBHOOK'U
-    // ------------------------------------------------------------
-
-    final vehicle = violation["vehicle"];
+    // BÖLGE İHLALİ: Mevcut akış korunuyor.
+    final vehicle = violation['vehicle'];
     final vehicleId =
-    vehicle is Map ? vehicle["_id"]?.toString() ?? "" : "";
-    final summary = data["summary"]?.toString() ?? "";
-
+    vehicle is Map ? vehicle['_id'] as String : '';
+    final summary = data['summary'] as String? ?? '';
     final plate = home.extractPlate(summary);
 
-    if (plate.isNotEmpty && vehicleId.isNotEmpty) {
+    if (plate.isNotEmpty) {
       await settings.updateVehicleId(
         plate: plate,
         vehicleId: vehicleId,
@@ -224,7 +207,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     String text = settings.buildAnnouncementText(announcement);
 
     BusModel? bus;
-
     try {
       bus = settings.buses.firstWhere(
             (e) =>
@@ -238,7 +220,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (bus != null &&
         bus.speakNote &&
         bus.note.trim().isNotEmpty) {
-      text += " Not. ${bus.note}";
+      text += ' Not. ${bus.note}';
     }
 
     if (settings.notification) {

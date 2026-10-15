@@ -1,44 +1,26 @@
-import 'dart:io';
-
-import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter_edge_tts/flutter_edge_tts.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class TtsService {
-  final AudioPlayer _player = AudioPlayer();
+  final FlutterTts _tts = FlutterTts();
 
-  Future<void> speak({
-    required String text,
-    required String voiceType,
-  }) async {
-    final tts = FlutterEdgeTts(
-      voice: voiceType == "Erkek"
-          ? "tr-TR-AhmetNeural"
-          : "tr-TR-EmelNeural",
-    );
+  TtsService() {
+    _tts.setLanguage('tr-TR');
+    _tts.setSpeechRate(0.45);
+    _tts.setVolume(1.0);
+    _tts.setPitch(1.0);
+  }
 
-    // Önce mevcut sesi durdur
-    await _player.stop();
+  Future<void> speak({required String text, required String voiceType}) async {
+    await _tts.stop();
+    await _tts.setLanguage('tr-TR');
 
-    // Her anons için farklı dosya
-    final file =
-        "${Directory.systemTemp.path}\\announcement_${DateTime.now().microsecondsSinceEpoch}.mp3";
+    // Şimdilik Windows'ta test ettiğimiz Türkçe erkek sesi.
+    await _tts.setVoice({'name': 'Microsoft Tolga', 'locale': 'tr-TR'});
 
-    try {
-      await tts.synthesizeToFile(
-        text,
-        audioFilePath: file,
-      );
-
-      await _player.play(
-        DeviceFileSource(file),
-      );
-    } finally {
-      await tts.close();
-    }
+    await _tts.speak(text);
   }
 
   Future<void> dispose() async {
-    await _player.stop();
-    await _player.dispose();
+    await _tts.stop();
   }
 }

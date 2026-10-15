@@ -1,6 +1,7 @@
+
 import 'dart:io';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,11 +9,9 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-// Modern package:web entegrasyonu (dart:html yerine)
-import 'package:web/web.dart' as web;
-import 'dart:js_interop';
 
 import '../../models/CashItemModel.dart';
+
 
 final cashRegisterViewModelProvider = ChangeNotifierProvider(
       (ref) => CashRegisterViewModel(),
@@ -76,60 +75,57 @@ class CashRegisterViewModel extends ChangeNotifier {
   }
 
   /// Web ve Masaüstü uyumlu modern PNG Kaydetme / İndirme Fonksiyonu
+
   Future<String?> saveReportAsPng(GlobalKey repaintKey) async {
     try {
-      final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
+      final boundary =
+      repaintKey.currentContext?.findRenderObject()
+      as RenderRepaintBoundary?;
+
+      if (boundary == null) {
+        return null;
+      }
 
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return null;
 
-      final pngBytes = byteData.buffer.asUint8List();
-      final nowStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final fileName = 'Sakaryasev_Kasa_$nowStr.png';
+      try {
+        final byteData =
+        await image.toByteData(format: ui.ImageByteFormat.png);
 
-      if (kIsWeb) {
-        // Modern package:web kullanarak tarayıcıda dosya indirme
-        final blob = web.Blob([pngBytes.toJS].toJS, web.BlobPropertyBag(type: 'image/png'));
-        final url = web.URL.createObjectURL(blob);
-        final anchor = web.document.createElement('a') as web.HTMLAnchorElement
-          ..href = url
-          ..download = fileName;
-
-        web.document.body?.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        web.URL.revokeObjectURL(url);
-
-        return "Tarayıcı İndirilenler Klasörü ($fileName)";
-      } else {
-        // Masaüstü ortamı (Windows / macOS / Linux)
-        Directory? targetDir;
-        if (Platform.isWindows) {
-          final userProfile = Platform.environment['USERPROFILE'];
-          if (userProfile != null) {
-            targetDir = Directory('$userProfile\\Desktop');
-          }
-        } else if (Platform.isMacOS || Platform.isLinux) {
-          final home = Platform.environment['HOME'];
-          if (home != null) {
-            targetDir = Directory('$home/Desktop');
-          }
+        if (byteData == null) {
+          return null;
         }
 
-        targetDir ??= await getApplicationDocumentsDirectory();
+        final pngBytes = byteData.buffer.asUint8List();
+        final nowStr =
+        DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+        final fileName = 'Sakaryasev_Kasa_$nowStr.png';
 
-        final filePath = '${targetDir.path}${Platform.pathSeparator}$fileName';
-        final file = File(filePath);
-        await file.writeAsBytes(pngBytes);
+        final userProfile = Platform.environment['USERPROFILE'];
+
+        Directory targetDir = userProfile != null
+            ? Directory('$userProfile\\Desktop')
+            : await getApplicationDocumentsDirectory();
+
+        if (!await targetDir.exists()) {
+          targetDir = await getApplicationDocumentsDirectory();
+        }
+
+        final filePath =
+            '${targetDir.path}${Platform.pathSeparator}$fileName';
+
+        await File(filePath).writeAsBytes(pngBytes);
+
         return filePath;
+      } finally {
+        image.dispose();
       }
     } catch (e) {
-      debugPrint("Rapor kaydedilirken hata oluştu: $e");
+      debugPrint('Rapor kaydedilirken hata oluştu: $e');
       return null;
     }
   }
+
   /// Oluşturulan PNG dosyasını share_plus ile paylaşma / WhatsApp'a gönderme
   Future<void> sharePngFile(String filePath) async {
     if (filePath.isNotEmpty && !filePath.startsWith("Tarayıcı")) {
