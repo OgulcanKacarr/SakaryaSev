@@ -1,13 +1,14 @@
+import 'package:arac_takip/services/DatabaseService/DatabaseService.dart';
 import 'package:arac_takip/services/SharedPrefService.dart';
+import 'package:arac_takip/services/TrioListenerService/TrioListenerService.dart';
 import 'package:arac_takip/view/SplashPage.dart';
 import 'package:arac_takip/view/home/home_page.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 import 'constants/AppLifecycleObserver.dart';
 import 'constants/AppPagePath.dart';
 import 'constants/AppThemes.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,24 +16,14 @@ Future<void> main() async {
   final bool isFirstLaunch =
   await _checkFirstLaunch();
 
-  // Yalnızca Windows masaüstünde çalıştır.
-  if (!kIsWeb &&
-      defaultTargetPlatform == TargetPlatform.windows) {
-    await windowManager.ensureInitialized();
-
-    const windowOptions = WindowOptions(
-      center: true,
-      title: 'Sakaryasev Araç Takip',
-    );
-
-    await windowManager.waitUntilReadyToShow(
-      windowOptions,
-          () async {
-        await windowManager.maximize();
-        await windowManager.show();
-        await windowManager.focus();
-      },
-    );
+  try {
+    DatabaseService.instance.database;
+    debugPrint('SakaryaSEV veritabanı başarıyla başlatıldı.');
+    await TrioListenerService.instance.start(port: 5000);
+    debugPrint('TRIO dinleyicisi başarıyla başlatıldı.');
+  } catch (e, stackTrace) {
+    debugPrint('Veritabanı başlatma hatası: $e');
+    debugPrintStack(stackTrace: stackTrace);
   }
 
   runApp(
@@ -52,13 +43,11 @@ Future<bool> _checkFirstLaunch() async {
       false,
     );
   }
-
   return isFirstLaunch;
 }
 
 class MyApp extends StatefulWidget {
   final bool isFirstRun;
-
   const MyApp({
     super.key,
     required this.isFirstRun,
@@ -90,7 +79,6 @@ class _MyAppState extends State<MyApp> {
     WidgetsBinding.instance.removeObserver(
       _appLifecycleObserver,
     );
-
     super.dispose();
   }
 

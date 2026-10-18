@@ -1,681 +1,277 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import 'package:intl/intl.dart';
-
-import '../../models/BusModel.dart';
-import '../../models/TripModel.dart';
-import '../../services/NotificationService.dart';
-import '../../services/TtsService.dart';
-import '../../services/WebhookService.dart';
-import '../../viewModel/HomePageViewModel.dart';
-import '../../viewModel/settings/SettingsViewModel.dart';
-import '../../widgets/DepartureCard.dart';
-import '../../widgets/LastAnnouncementsCard.dart';
-import '../CashRegisterPage/CashRegisterPage.dart';
+import '../../viewModel/home/HomePageViewModel.dart';
+import '../settings/GeneralSettingsPage/GeneralSettingsPage.dart';
 import '../settings/SettingsPage.dart';
 
-final homeProvider = ChangeNotifierProvider(
-      (ref) => HomePageViewModel(),
-);
+final homeProvider =
+ChangeNotifierProvider((ref) => HomePageViewModel());
 
-class HomePage extends ConsumerStatefulWidget {
+class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   @override
-  ConsumerState<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends ConsumerState<HomePage> {
-  final NotificationService _notificationService = NotificationService();
-  final TtsService _ttsService = TtsService();
-
-  WebhookService? _webhookService;
-
-  int selectedIndex = 0;
-  Timer? _manualArrivalTimer;
-
-  final Set<String> _announcedManualArrivals = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    final settings = ref.read(settingsProvider);
-
-    await _notificationService.init();
-
-    await settings.loadWebhookUrl();
-    await settings.loadBuses();
-    await settings.loadTrips();
-    await settings.loadSpeedViolationSetting();
-
-    _beklet(){
-      _webhookService = WebhookService(
-        webhookUrl: "https://www.sakaryasevturizm.com/acswhook",
-        authKey: "362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c",
-      );
-    }
-
-
-    _webhookService = WebhookService(
-      webhookUrl: "http://localhost/speed_test/speed_test_webhook.php",
-      authKey: "362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c",
-    );
-
-
-    _webhookService!.start(
-      onReceive: _handleWebhookData,
-    );
-
-    _startManualArrivalChecker();
-  }
-
-
-  Future<void> _handleWebhookData(Map<String, dynamic> data) async {
-    final settings = ref.read(settingsProvider);
-    final home = ref.read(homeProvider);
-
-    final violation = data['violation'];
-    if (violation is! Map) return;
-
-    final measurement = violation['measurement'];
-
-    // HIZ İHLALİ
-    if (measurement is Map && measurement['speed'] != null) {
-      final vehicle = violation['vehicle'];
-      final vehicleId =
-      vehicle is Map ? vehicle['_id']?.toString() ?? '' : '';
-
-      final summary = data['summary']?.toString() ?? '';
-      final plateFromSummary = home.extractPlate(summary);
-
-      final alarmRule = data['alarmRule'];
-      final rule = alarmRule is Map ? alarmRule['rule'] : null;
-      final threshold = rule is Map ? rule['threshold'] : null;
-      final speedRule =
-      threshold is Map ? threshold['speed'] : null;
-      final latest = speedRule is Map ? speedRule['latest'] : null;
-      final limitData =
-      latest is Map ? latest['limit'] : null;
-      final limit =
-      limitData is Map ? limitData['moreThan'] : null;
-
-      final speed = measurement['speed'];
-
-      if (speed is! num || limit is! num) {
-        debugPrint('Hız ihlali verisi eksik: hız veya limit bulunamadı.');
-        return;
-      }
-
-      BusModel? bus;
-
-      // Önce Trio araç ID'siyle eşleştir.
-      try {
-        bus = settings.buses.firstWhere(
-              (b) => b.vehicleId.isNotEmpty &&
-              b.vehicleId == vehicleId,
-        );
-      } catch (_) {
-        bus = null;
-      }
-
-      // ID eşleşmezse plakayla eşleştir.
-      if (bus == null && plateFromSummary.isNotEmpty) {
-        try {
-          bus = settings.buses.firstWhere(
-                (b) =>
-            b.plate.toUpperCase() ==
-                plateFromSummary.toUpperCase(),
-          );
-        } catch (_) {
-          bus = null;
-        }
-      }
-
-      final plate = bus?.plate ?? plateFromSummary;
-
-      if (plate.isEmpty) {
-        debugPrint('Hız ihlalinde araç plakası bulunamadı.');
-        return;
-      }
-
-      if (vehicleId.isNotEmpty &&
-          bus != null &&
-          bus.vehicleId != vehicleId) {
-        await settings.updateVehicleId(
-          plate: plate,
-          vehicleId: vehicleId,
-        );
-      }
-
-      final speedText = speed.toStringAsFixed(0);
-      final limitText = limit.toStringAsFixed(0);
-
-      final text =
-          'Dikkat! $plate plakalı araç, '
-          '$limitText kilometre/saat hız sınırını aşarak '
-          'saatte $speedText kilometre hızla seyrediyor.';
-
-      if (settings.notification) {
-        await _notificationService.show(
-          title: 'Hız İhlali - $plate',
-          body: text,
-        );
-      }
-
-      if (settings.speakSpeedViolations) {
-        await _ttsService.speak(
-          text: text,
-          voiceType: settings.voiceType,
-        );
-      }
-
-      debugPrint('Hız ihlali işlendi: $text');
-      return;
-    }
-
-    // BÖLGE İHLALİ: Mevcut akış korunuyor.
-    final vehicle = violation['vehicle'];
-    final vehicleId =
-    vehicle is Map ? vehicle['_id'] as String : '';
-    final summary = data['summary'] as String? ?? '';
-    final plate = home.extractPlate(summary);
-
-    if (plate.isNotEmpty) {
-      await settings.updateVehicleId(
-        plate: plate,
-        vehicleId: vehicleId,
-      );
-    }
-
-    final announcement = home.createAnnouncement(
-      webhook: data,
-      buses: settings.buses,
-      trips: settings.trips,
-    );
-
-    if (announcement == null) return;
-
-    home.addAnnouncement(announcement);
-
-    String text = settings.buildAnnouncementText(announcement);
-
-    BusModel? bus;
-    try {
-      bus = settings.buses.firstWhere(
-            (e) =>
-        e.plate.toUpperCase() ==
-            announcement.plate.toUpperCase(),
-      );
-    } catch (_) {
-      bus = null;
-    }
-
-    if (bus != null &&
-        bus.speakNote &&
-        bus.note.trim().isNotEmpty) {
-      text += ' Not. ${bus.note}';
-    }
-
-    if (settings.notification) {
-      await _notificationService.show(
-        title: announcement.plate,
-        body: text,
-      );
-    }
-
-    if (settings.voice) {
-      await _ttsService.speak(
-        text: text,
-        voiceType: settings.voiceType,
-      );
-    }
-  }
-
-
-  @override
-  void dispose() {
-    _webhookService?.dispose();
-    _ttsService.dispose();
-    _manualArrivalTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ref.listen(
-      settingsProvider,
-          (previous, next) {
-        if (previous?.webhookUrl != next.webhookUrl) {
-          _webhookService?.updateUrl(next.webhookUrl);
-        }
-      },
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vm = ref.watch(homeProvider);
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: Row(
         children: [
-          _buildNavigationRail(),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: selectedIndex == 0
-                ? _buildDashboard()
-                : selectedIndex == 1
-                ? const CashRegisterPage()
-                : const SettingsPage(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavigationRail() {
-    return NavigationRail(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: (index) {
-        setState(() {
-          selectedIndex = index;
-        });
-      },
-      labelType: NavigationRailLabelType.all,
-      leading: const Padding(
-        padding: EdgeInsets.only(top: 20),
-        child: Icon(
-          Icons.directions_bus,
-          size: 40,
-        ),
-      ),
-      destinations: const [
-        NavigationRailDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: Text("Ana Sayfa"),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.account_balance_wallet_outlined),
-          selectedIcon: Icon(Icons.account_balance_wallet),
-          label: Text("Kasa"),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: Text("Ayarlar"),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDashboard() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final String currentDate = DateFormat('dd.MM.yyyy').format(DateTime.now());
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ÜST BAŞLIK VE LOGO ALANI
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Sol Köşe: Tarih
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  "Tarih: $currentDate",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isDark ? Colors.white70 : Colors.black87,
+          Container(
+            width: 250,
+            color: const Color(0xFF171C20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 28),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 22),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.directions_bus_filled_rounded,
+                        color: Colors.tealAccent,
+                        size: 34,
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Sakarya SEV',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-
-              // Orta Kısım: Logo ve Başlık
-              Column(
-                children: [
-                  Image.asset(
-                    'assets/images/logo.png',
-                    height: 60,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.directions_bus, size: 50, color: Colors.blueAccent),
-                  ),
-                  const SizedBox(height: 8),
-
-                  Text(
-                    "Araç Takip ve Operasyon Merkezi",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.2,
-                      color: isDark ? Colors.cyanAccent : Colors.blueAccent,
+                const SizedBox(height: 34),
+                _MenuItem(
+                  icon: Icons.dashboard_rounded,
+                  title: 'Ana Sayfa',
+                  selected: vm.selectedPage == 'home',
+                  onTap: () => ref
+                      .read(homeProvider)
+                      .selectPage('home'),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  child: InkWell(
+                    onTap: () =>
+                        ref.read(homeProvider).toggleSettings(),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.settings_rounded,
+                            color: Colors.white70,
+                            size: 21,
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Ayarlar',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            vm.settingsExpanded
+                                ? Icons.keyboard_arrow_up
+                                : Icons.keyboard_arrow_down,
+                            color: Colors.white70,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-
-
-                ],
-              ),
-
-              // Sağ Kısım Simetri Boşluğu
-              const SizedBox(width: 80),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-          const Divider(thickness: 1.2),
-          const SizedBox(height: 24),
-
-          _buildSectionTitle(
-            "Araç Notları",
-            Icons.sticky_note_2_outlined,
-          ),
-
-          const SizedBox(height: 12),
-
-          SizedBox(
-            height: 180,
-            child: _buildBusNotes(),
-          ),
-
-          const SizedBox(height: 24),
-
-          _buildSectionTitle(
-            "Son Duyurular",
-            Icons.notifications_active_outlined,
-          ),
-
-          const SizedBox(height: 12),
-
-          const SizedBox(
-            height: 250,
-            child: LastAnnouncementsCard(),
-          ),
-
-          const SizedBox(height: 24),
-
-          _buildSectionTitle(
-            "Sefer Durumları",
-            Icons.route,
-          ),
-
-          const SizedBox(height: 12),
-
-          SizedBox(
-            height: 250,
-            child: GridView.count(
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 3,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.5,
-              children: const [
-                DepartureCard(
-                  departure: "Karasu",
                 ),
-                DepartureCard(
-                  departure: "Harem",
-                ),
-                DepartureCard(
-                  departure: "Esenler",
+                if (vm.settingsExpanded)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 25),
+                    child: _MenuItem(
+                      icon: Icons.tune_rounded,
+                      title: 'Genel Ayarlar',
+                      selected: vm.selectedPage == 'generalSettings',
+                      onTap: () => ref
+                          .read(homeProvider)
+                          .selectPage('generalSettings'),
+                      compact: true,
+                    ),
+                  ),
+                if (vm.settingsExpanded)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 25),
+                    child: _MenuItem(
+                      icon: Icons.directions_bus_outlined,
+                      title: 'Araçlar',
+                      selected: vm.selectedPage == 'vehicles',
+                      onTap: () => ref
+                          .read(homeProvider)
+                          .selectPage('vehicles'),
+                      compact: true,
+                    ),
+                  ),
+                const Spacer(),
+                const Divider(color: Colors.white12),
+                const Padding(
+                  padding: EdgeInsets.all(18),
+                  child: Text(
+                    'Sakarya SEV • Yönetim',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
+          Expanded(
+            child: _buildContent(vm.selectedPage, theme),
+          ),
 
-          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildBusNotes() {
-    final settings = ref.watch(settingsProvider);
+    Widget _buildContent(String page, ThemeData theme) {
+      switch (page) {
+        case 'vehicles':
+          return const SettingsPage();
 
-    final busesWithNotes = settings.buses
-        .where(
-          (bus) => bus.note.trim().isNotEmpty,
-    )
-        .toList();
+        case 'generalSettings':
+          return const GeneralSettingsPage();
 
-    if (busesWithNotes.isEmpty) {
-      return Card(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+        case 'home':
+        default:
+          return Container(
+            color: theme.scaffoldBackgroundColor,
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.info_outline,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                const SizedBox(width: 12),
                 Text(
-                  "Kayıtlı araç notu bulunmuyor.",
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.outline,
+                  'Ana Sayfa',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: ListView.separated(
-        padding: const EdgeInsets.all(8),
-        itemCount: busesWithNotes.length,
-        separatorBuilder: (_, __) => const Divider(
-          height: 1,
-        ),
-        itemBuilder: (context, index) {
-          final bus = busesWithNotes[index];
-
-          return ListTile(
-            leading: CircleAvatar(
-              child: Icon(
-                bus.speakNote
-                    ? Icons.volume_up
-                    : Icons.sticky_note_2_outlined,
-              ),
-            ),
-            title: Text(
-              bus.plate,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: Text(
-                bus.note,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                OutlinedButton.icon(
-                  icon: Icon(
-                    bus.speakNote
-                        ? Icons.volume_up
-                        : Icons.volume_off_outlined,
-                  ),
-                  label: Text(
-                    bus.speakNote
-                        ? "Seslendiriliyor"
-                        : "Notu Seslendir",
-                  ),
-                  onPressed: () async {
-                    await settings.setBusNoteSpeech(
-                      plate: bus.plate,
-                      value: !bus.speakNote,
-                    );
-                  },
+                const SizedBox(height: 8),
+                Text(
+                  'Sakarya SEV araç takip ve yönetim paneline hoş geldin.',
+                  style: theme.textTheme.bodyLarge,
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: "Notu Sil",
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
+                const SizedBox(height: 28),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.directions_bus_rounded,
+                          size: 38,
+                          color: Colors.teal,
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Text(
+                            'Araç takip özeti ve TRIO olayları bu alana eklenecek.',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onPressed: () async {
-                    await settings.deleteBusNote(
-                      plate: bus.plate,
-                    );
-                  },
                 ),
               ],
             ),
           );
-        },
-      ),
-    );
+      }
+    }
   }
 
-  Widget _buildSectionTitle(
-      String title,
-      IconData icon,
-      ) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool compact;
+
+  const _MenuItem({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        compact ? 8 : 12,
+        3,
+        12,
+        3,
+      ),
+      child: Material(
+        color: selected
+            ? const Color(0xFF126E65)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: compact ? 11 : 13,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: selected
+                      ? Colors.white
+                      : Colors.white70,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: selected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  const Icon(
+                    Icons.circle,
+                    size: 7,
+                    color: Colors.tealAccent,
+                  ),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
     );
-  }
-
-  void _startManualArrivalChecker() {
-    _manualArrivalTimer?.cancel();
-    _checkManualArrivals();
-    _manualArrivalTimer = Timer.periodic(
-      const Duration(seconds: 30),
-          (_) => _checkManualArrivals(),
-    );
-  }
-
-  Future<void> _checkManualArrivals() async {
-    final settings = ref.read(settingsProvider);
-    final now = DateTime.now();
-
-    for (final bus in settings.buses) {
-      if (!bus.manualTracking) continue;
-      if (bus.estimatedArrivalMinutes <= 0) continue;
-
-      final trips = settings.getTripsByPlate(bus.plate);
-      if (trips.isEmpty) continue;
-
-      TripModel? selectedTrip;
-      int smallestDifference = 999999;
-      final currentMinutes = now.hour * 60 + now.minute;
-
-      for (final trip in trips) {
-        final parts = trip.time.split(":");
-        if (parts.length != 2) continue;
-
-        final hour = int.tryParse(parts[0]);
-        final minute = int.tryParse(parts[1]);
-        if (hour == null || minute == null) continue;
-
-        final tripMinutes = hour * 60 + minute;
-        final difference = (tripMinutes - currentMinutes).abs();
-
-        if (difference < smallestDifference) {
-          smallestDifference = difference;
-          selectedTrip = trip;
-        }
-      }
-
-      if (selectedTrip == null) continue;
-
-      final parts = selectedTrip.time.split(":");
-      final departureHour = int.parse(parts[0]);
-      final departureMinute = int.parse(parts[1]);
-
-      final departureTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        departureHour,
-        departureMinute,
-      );
-
-      final estimatedArrival = departureTime.add(
-        Duration(minutes: bus.estimatedArrivalMinutes),
-      );
-
-      final difference = now.difference(estimatedArrival).inSeconds;
-      if (difference < 0) continue;
-      if (difference > 600) continue;
-
-      final announcementId =
-          "${bus.plate}_${selectedTrip.time}_${now.year}-${now.month}-${now.day}";
-
-      if (_announcedManualArrivals.contains(announcementId)) continue;
-
-      _announcedManualArrivals.add(announcementId);
-
-      await _speakManualArrival(
-        bus: bus,
-        trip: selectedTrip,
-      );
-    }
-  }
-
-  Future<void> _speakManualArrival({
-    required BusModel bus,
-    required TripModel trip,
-  }) async {
-    final settings = ref.read(settingsProvider);
-
-    final List<String> parts = [];
-    parts.add("${bus.plate} plakalı araç");
-    parts.add("${trip.departure} kalkışlı");
-    parts.add("yaklaşık olarak Sakarya'ya ulaştı.");
-
-    if (bus.note.trim().isNotEmpty) {
-      parts.add("Araç notu: ${bus.note}");
-    }
-
-    final text = parts.join(" ");
-
-    if (settings.notification) {
-      await _notificationService.show(
-        title: "${bus.plate} Tahmini Varış",
-        body: text,
-      );
-    }
-
-    if (settings.voice) {
-      await _ttsService.speak(
-        text: text,
-        voiceType: settings.voiceType,
-      );
-    }
   }
 }

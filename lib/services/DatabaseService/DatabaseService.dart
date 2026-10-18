@@ -1,8 +1,7 @@
 import 'dart:io';
-
-import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart';
 
 class DatabaseService {
   DatabaseService._();
@@ -12,107 +11,96 @@ class DatabaseService {
   Database? _database;
 
   Database get database {
-    if (_database == null) {
-      throw Exception('Database henüz başlatılmadı.');
-    }
-
-    return _database!;
-  }
-
-  Future<void> initialize() async {
     if (_database != null) {
-      return;
+      return _database!;
     }
 
-    sqfliteFfiInit();
-
-    databaseFactory = databaseFactoryFfi;
-
-    final Directory appDirectory = await getApplicationSupportDirectory();
-
-    final String dbPath = join(appDirectory.path, 'sakaryasev.db');
-
-    _database = await openDatabase(
-      dbPath,
-
-      version: 3,
-
-      onCreate: _onCreate,
-
-      onUpgrade: _onUpgrade,
-    );
-  }
-
-  Future<void> _onCreate(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE vehicles(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        trio_vehicle_id TEXT NOT NULL UNIQUE,
-        plate TEXT NOT NULL,
-        origin TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1
+    if (!Platform.isWindows) {
+      throw UnsupportedError(
+        'DatabaseService şu anda yalnızca Windows için yapılandırılmıştır.',
       );
-    ''');
+    }
 
-    await db.execute('''
-      CREATE TABLE regions(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        region_id TEXT NOT NULL UNIQUE,
-        region_name TEXT NOT NULL,
-        voice_enabled INTEGER NOT NULL DEFAULT 1,
-        notification_enabled INTEGER NOT NULL DEFAULT 1
-      );
-    ''');
+    final appData = Platform.environment['LOCALAPPDATA'];
 
-    await db.execute('''
-      CREATE TABLE drivers(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1
-      );
-    ''');
+    if (appData == null || appData.isEmpty) {
+      throw StateError('Windows LOCALAPPDATA dizini bulunamadı.');
+    }
 
-    await db.execute('''
-      CREATE TABLE settings(
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-    ''');
+    final directory = Directory(p.join(appData, 'SakaryaSEV'));
 
-    await db.execute('''
-      CREATE TABLE vehicle_driver_assignments(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        vehicle_id INTEGER NOT NULL,
-        driver_id INTEGER NOT NULL,
-        date TEXT NOT NULL,
+    if (!directory.existsSync()) {
+      directory.createSync(recursive: true);
+    }
 
-        FOREIGN KEY(vehicle_id)
-        REFERENCES vehicles(id),
+    final dbPath = p.join(directory.path, 'sakaryasev.db');
 
-        FOREIGN KEY(driver_id)
-        REFERENCES drivers(id)
-      );
-    ''');
-  }
+    final db = sqlite3.open(dbPath);
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 3) {
+    try {
+      db.execute('PRAGMA foreign_keys = ON');
 
-
-      await db.execute('''
-        CREATE TABLE vehicle_driver_assignments(
+      db.execute('''
+        CREATE TABLE IF NOT EXISTS vehicles (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          vehicle_id INTEGER NOT NULL,
-          driver_id INTEGER NOT NULL,
-          date TEXT NOT NULL
-        );
+          plate TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          trio_vehicle_id TEXT UNIQUE,
+          brand TEXT,
+          model TEXT,
+          year INTEGER,
+          description TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
       ''');
+
+      db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_vehicles_trio_id
+        ON vehicles(trio_vehicle_id)
+      ''');
+
+
+      db.execute('''
+  CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+''');
+
+      db.execute('''
+  INSERT OR IGNORE INTO app_settings
+    (setting_key, setting_value, updated_at)
+  VALUES
+    ('voice_enabled', '1', datetime('now')),
+    ('voice_gender', 'female', datetime('now')),
+    ('windows_notifications_enabled', '1', datetime('now')),
+    ('speed_notifications_enabled', '1', datetime('now')),
+    ('ignition_notifications_enabled', '1', datetime('now')),
+    ('idle_notifications_enabled', '1', datetime('now')),
+    ('region_notifications_enabled', '1', datetime('now'))
+''');
+      
+      _database = db;
+
+      debugPrint('SakaryaSEV veritabanı hazır: $dbPath');
+
+      return db;
+    } catch (_) {
+      db.dispose();
+      rethrow;
     }
   }
 
-  Future<void> close() async {
-    await _database?.close();
+  int getVehicleCount() {
+    final result = database.select('SELECT COUNT(*) AS total FROM vehicles');
 
+    return result.first['total'] as int;
+  }
+
+  void close() {
+    _database?.dispose();
     _database = null;
   }
 }
