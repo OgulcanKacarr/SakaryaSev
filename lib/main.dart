@@ -1,5 +1,5 @@
 import 'package:arac_takip/services/DatabaseService/DatabaseService.dart';
-import 'package:arac_takip/services/SharedPrefService.dart';
+import 'package:arac_takip/services/SharedPrefService/SharedPrefService.dart';
 import 'package:arac_takip/services/TrioListenerService/TrioListenerService.dart';
 import 'package:arac_takip/view/SplashPage.dart';
 import 'package:arac_takip/view/home/home_page.dart';

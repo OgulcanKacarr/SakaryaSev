@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../constants/AppStrings.dart';
-import '../constants/ConstMethods.dart';
+import '../../constants/AppStrings.dart';
+import '../../constants/ConstMethods.dart';
 
 class SharedPrefService {
 

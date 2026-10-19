@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
+import '../TrioNotificationService/TrioNotificationService.dart';
 import '../VehicleService/VehicleService.dart';
 
 
@@ -86,8 +87,11 @@ class TrioListenerService {
           const JsonEncoder.withIndent('  ').convert(event),
         );
 
-        // Gelen olaydan plaka ve TRIO araç ID'sini eşleştir.
+        // Mevcut araç–TRIO eşleştirmesi aynen korunuyor.
         VehicleService.instance.autoMatchTrioEvent(event);
+
+        // Yeni: TRIO olayını ayarlara göre seslendir ve/veya bildir.
+        await TrioNotificationService.instance.handleEvent(event);
 
         request.response.statusCode = HttpStatus.ok;
         request.response.write(
