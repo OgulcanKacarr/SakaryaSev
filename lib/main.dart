@@ -5,6 +5,7 @@ import 'package:arac_takip/view/SplashPage.dart';
 import 'package:arac_takip/view/home/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_file.dart';
 import 'constants/AppLifecycleObserver.dart';
 import 'constants/AppPagePath.dart';
 import 'constants/AppThemes.dart';
@@ -18,9 +19,7 @@ Future<void> main() async {
 
   try {
     DatabaseService.instance.database;
-    debugPrint('SakaryaSEV veritabanı başarıyla başlatıldı.');
     await TrioListenerService.instance.start(port: 5000);
-    debugPrint('TRIO dinleyicisi başarıyla başlatıldı.');
   } catch (e, stackTrace) {
     debugPrint('Veritabanı başlatma hatası: $e');
     debugPrintStack(stackTrace: stackTrace);

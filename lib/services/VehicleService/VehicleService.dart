@@ -196,7 +196,6 @@ class VehicleService {
       final currentTrioId = vehicle.trioVehicleId?.trim();
 
       if (currentTrioId == trioId) {
-        debugPrint('TRIO eşleştirmesi zaten mevcut: $plate ↔ $trioId');
         return;
       }
 

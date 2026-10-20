@@ -28,9 +28,7 @@ class TrioListenerService {
         port,
       );
 
-      debugPrint(
-        'TRIO dinleyicisi başladı: http://127.0.0.1:$port',
-      );
+
 
       _server!.listen(
         _handleRequest,
@@ -82,11 +80,6 @@ class TrioListenerService {
 
         final event = Map<String, dynamic>.from(decoded);
 
-        debugPrint('TRIO webhook olayı alındı:');
-        debugPrint(
-          const JsonEncoder.withIndent('  ').convert(event),
-        );
-
         // Mevcut araç–TRIO eşleştirmesi aynen korunuyor.
         VehicleService.instance.autoMatchTrioEvent(event);
 
@@ -132,6 +125,6 @@ class TrioListenerService {
     await server.close(force: true);
     _server = null;
 
-    debugPrint('TRIO dinleyicisi durduruldu.');
+
   }
 }

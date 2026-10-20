@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'EdgeSpeechEngine/EdgeSpeechEngine.dart';
 import 'PiperSpeechEngine/PiperSpeechEngine.dart';
 import 'SpeechEngine.dart';
+import 'TtsSpeechEngine/TtsSpeechEngine.dart';
 import 'WindowsSpeechEngine/WindowsSpeechEngine.dart';
 
 
@@ -11,11 +12,11 @@ class SpeechService {
 
   static final SpeechService instance = SpeechService._();
 
-  // Yeni motorlar buraya, Windows motorundan ÖNCE eklenir.
   final List<SpeechEngine> _engines = [
-    PiperSpeechEngine(),
-    EdgeSpeechEngine(),
-    WindowsSpeechEngine(),
+    EdgeSpeechEngine(),   // İnternet üzerinden doğal ses
+    PiperSpeechEngine(),  // Önce yerel sinir ağı sesi
+    WindowsTtsEngine(),   // Yerel Windows TTS yedeği
+    WindowsSpeechEngine(), // Son çare
   ];
 
   // Aynı anda iki motorun konuşmasını engeller.
@@ -56,37 +57,39 @@ class SpeechService {
     return task;
   }
 
+
   Future<void> _speakWithFallback(
       String text, {
         required String voiceGender,
       }) async {
     Object? lastError;
 
+    debugPrint('=== TTS motor listesi ===');
+    for (final engine in _engines) {
+      debugPrint('Motor: ${engine.name}');
+    }
+
     for (final SpeechEngine engine in _engines) {
       try {
-        if (!await engine.isAvailable()) {
+        final available = await engine.isAvailable();
+        if (!available) {
           continue;
         }
-
-        debugPrint('Konuşma motoru deneniyor: ${engine.name}');
-
         await engine.speak(
           text,
           voiceGender: voiceGender,
         );
-
-        // Başarılı motor konuştu; başka motoru çalıştırma.
         return;
-      } catch (error) {
+      } catch (error, stackTrace) {
         lastError = error;
-        debugPrint(
-          '${engine.name} başarısız oldu; sonraki motor denenecek: $error',
-        );
+        debugPrint('[TTS] ${engine.name} HATA: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
     }
 
     throw Exception(
-      'Hiçbir konuşma motoru metni seslendiremedi. Son hata: $lastError',
+      'Hiçbir konuşma motoru çalışmadı. Son hata: $lastError',
     );
   }
+
 }

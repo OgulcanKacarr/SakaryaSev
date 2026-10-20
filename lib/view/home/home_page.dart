@@ -1,13 +1,26 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+
+import '../../services/NoteService/NoteService.dart';
+import '../../services/TrioNotificationService/TrioNotificationService.dart';
 import '../../viewModel/home/HomePageViewModel.dart';
 import '../settings/GeneralSettingsPage/GeneralSettingsPage.dart';
+import '../settings/KasaPage/KasaPage.dart';
+import '../settings/MuavinPage/MuavinPage.dart';
+import '../settings/NotesPage/NotesPage.dart';
+import '../settings/SoforPage/SoforPage.dart';
 import '../settings/SettingsPage.dart';
 
-final homeProvider =
-ChangeNotifierProvider((ref) => HomePageViewModel());
+final homeProvider = ChangeNotifierProvider((ref) => HomePageViewModel());
+
+const _navBackground = Color(0xFF151D2B);
+const _accent = Color(0xFF0D9488);
+const _pageBackground = Color(0xFFDCE5EF);
+const _textPrimary = Color(0xFF172033);
+const _textSecondary = Color(0xFF697586);
+const _cardBackground = Color(0xFFF1F5F9);
+const _cardBorder = Color(0xFFD5DEE9);
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -15,201 +28,273 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vm = ref.watch(homeProvider);
-    final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: _pageBackground,
       body: Row(
         children: [
-          Container(
-            width: 250,
-            color: const Color(0xFF171C20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 28),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 22),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.directions_bus_filled_rounded,
-                        color: Colors.tealAccent,
-                        size: 34,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Sakarya SEV',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 34),
-                _MenuItem(
-                  icon: Icons.dashboard_rounded,
-                  title: 'Ana Sayfa',
-                  selected: vm.selectedPage == 'home',
-                  onTap: () => ref
-                      .read(homeProvider)
-                      .selectPage('home'),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                  child: InkWell(
-                    onTap: () =>
-                        ref.read(homeProvider).toggleSettings(),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.settings_rounded,
-                            color: Colors.white70,
-                            size: 21,
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Ayarlar',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            vm.settingsExpanded
-                                ? Icons.keyboard_arrow_up
-                                : Icons.keyboard_arrow_down,
-                            color: Colors.white70,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                if (vm.settingsExpanded)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 25),
-                    child: _MenuItem(
-                      icon: Icons.tune_rounded,
-                      title: 'Genel Ayarlar',
-                      selected: vm.selectedPage == 'generalSettings',
-                      onTap: () => ref
-                          .read(homeProvider)
-                          .selectPage('generalSettings'),
-                      compact: true,
-                    ),
-                  ),
-                if (vm.settingsExpanded)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 25),
-                    child: _MenuItem(
-                      icon: Icons.directions_bus_outlined,
-                      title: 'Araçlar',
-                      selected: vm.selectedPage == 'vehicles',
-                      onTap: () => ref
-                          .read(homeProvider)
-                          .selectPage('vehicles'),
-                      compact: true,
-                    ),
-                  ),
-                const Spacer(),
-                const Divider(color: Colors.white12),
-                const Padding(
-                  padding: EdgeInsets.all(18),
-                  child: Text(
-                    'Sakarya SEV • Yönetim',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          _Sidebar(
+            selectedPage: vm.selectedPage,
+            settingsExpanded: vm.settingsExpanded,
+            onSelect: (page) => ref.read(homeProvider).selectPage(page),
+            onToggleSettings: () => ref.read(homeProvider).toggleSettings(),
           ),
-          Expanded(
-            child: _buildContent(vm.selectedPage, theme),
-          ),
-
+          Expanded(child: _buildContent(vm.selectedPage, ref)),
         ],
       ),
     );
   }
 
-    Widget _buildContent(String page, ThemeData theme) {
-      switch (page) {
-        case 'vehicles':
-          return const SettingsPage();
+  Widget _buildContent(String page, WidgetRef ref) {
+    switch (page) {
+      case 'vehicles':
+        return const SettingsPage();
+      case 'generalSettings':
+        return const GeneralSettingsPage();
+      case 'muavinler':
+        return const MuavinPage();
+      case 'soforler':
+        return const SoforPage();
+      case 'notes':
+        return const NotesPage();
+      case 'kasa':
+        return KasaPage();
+      case 'home':
+      default:
+        return _Dashboard(
+          onOpenNotes: () => ref.read(homeProvider).selectPage('notes'),
+          onOpenVehicles: () => ref.read(homeProvider).selectPage('vehicles'),
+          onOpenCash: () => ref.read(homeProvider).selectPage('kasa'),
+          onOpenDrivers: () => ref.read(homeProvider).selectPage('soforler'),
+          onOpenAssistants: () =>
+              ref.read(homeProvider).selectPage('muavinler'),
+        );
+    }
+  }
+}
 
-        case 'generalSettings':
-          return const GeneralSettingsPage();
+class _Sidebar extends StatelessWidget {
+  final String selectedPage;
+  final bool settingsExpanded;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onToggleSettings;
 
-        case 'home':
-        default:
-          return Container(
-            color: theme.scaffoldBackgroundColor,
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Ana Sayfa',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+  const _Sidebar({
+    required this.selectedPage,
+    required this.settingsExpanded,
+    required this.onSelect,
+    required this.onToggleSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 248,
+      color: _navBackground,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 24, 18, 28),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: _accent.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: const Icon(
+                      Icons.directions_bus_filled_rounded,
+                      color: Color(0xFF5EEAD4),
+                      size: 25,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sakarya SEV araç takip ve yönetim paneline hoş geldin.',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 28),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Row(
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.directions_bus_rounded,
-                          size: 38,
-                          color: Colors.teal,
+                        Text(
+                          'Sakarya SEV',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.1,
+                          ),
                         ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: Text(
-                            'Araç takip özeti ve TRIO olayları bu alana eklenecek.',
-                            style: theme.textTheme.titleMedium,
+                        SizedBox(height: 3),
+                        Text(
+                          'YÖNETİM PANELİ',
+                          style: TextStyle(
+                            color: Color(0xFF9BA8BA),
+                            fontSize: 9,
+                            letterSpacing: 1.4,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          );
-      }
-    }
+            const Padding(
+              padding: EdgeInsets.fromLTRB(22, 0, 18, 10),
+              child: Text(
+                'MENÜ',
+                style: TextStyle(
+                  color: Color(0xFF77869A),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            _NavItem(
+              icon: Icons.grid_view_rounded,
+              title: 'Ana Sayfa',
+              selected: selectedPage == 'home',
+              onTap: () => onSelect('home'),
+            ),
+            _NavItem(
+              icon: Icons.account_balance_wallet_rounded,
+              title: 'Gün Sonu Kasa',
+              selected: selectedPage == 'kasa',
+              onTap: () => onSelect('kasa'),
+            ),
+            _NavItem(
+              icon: Icons.sticky_note_2_rounded,
+              title: 'Notlar',
+              selected: selectedPage == 'notes',
+              onTap: () => onSelect('notes'),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 18, 14, 4),
+              child: Material(
+                color: settingsExpanded
+                    ? Colors.white.withOpacity(0.06)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: onToggleSettings,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.settings_rounded,
+                          color: Color(0xFFB7C2D0),
+                          size: 19,
+                        ),
+                        const SizedBox(width: 13),
+                        const Expanded(
+                          child: Text(
+                            'Yönetim',
+                            style: TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          settingsExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: const Color(0xFF9BA8BA),
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (settingsExpanded) ...[
+              _NavItem(
+                icon: Icons.tune_rounded,
+                title: 'Genel Ayarlar',
+                selected: selectedPage == 'generalSettings',
+                compact: true,
+                onTap: () => onSelect('generalSettings'),
+              ),
+              _NavItem(
+                icon: Icons.directions_bus_outlined,
+                title: 'Araçlar',
+                selected: selectedPage == 'vehicles',
+                compact: true,
+                onTap: () => onSelect('vehicles'),
+              ),
+              _NavItem(
+                icon: Icons.badge_outlined,
+                title: 'Muavinler',
+                selected: selectedPage == 'muavinler',
+                compact: true,
+                onTap: () => onSelect('muavinler'),
+              ),
+              _NavItem(
+                icon: Icons.airline_seat_recline_normal_rounded,
+                title: 'Şoförler',
+                selected: selectedPage == 'soforler',
+                compact: true,
+                onTap: () => onSelect('soforler'),
+              ),
+            ],
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.045),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withOpacity(0.07)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      color: Color(0xFF5EEAD4),
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Sakarya SEV\nYönetim sistemi',
+                        style: TextStyle(
+                          color: Color(0xFFB7C2D0),
+                          fontSize: 11,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
+}
 
-
-class _MenuItem extends StatelessWidget {
+class _NavItem extends StatelessWidget {
   final IconData icon;
   final String title;
   final bool selected;
-  final VoidCallback onTap;
   final bool compact;
+  final VoidCallback onTap;
 
-  const _MenuItem({
+  const _NavItem({
     required this.icon,
     required this.title,
     required this.selected,
@@ -220,58 +305,897 @@ class _MenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        compact ? 8 : 12,
-        3,
-        12,
-        3,
-      ),
+      padding: EdgeInsets.fromLTRB(compact ? 24 : 14, 3, 14, 3),
       child: Material(
-        color: selected
-            ? const Color(0xFF126E65)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: selected ? _accent : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: compact ? 11 : 13,
+              horizontal: compact ? 12 : 14,
+              vertical: compact ? 10 : 12,
             ),
             child: Row(
               children: [
                 Icon(
                   icon,
-                  size: 20,
-                  color: selected
-                      ? Colors.white
-                      : Colors.white70,
+                  size: compact ? 17 : 19,
+                  color: selected ? Colors.white : const Color(0xFFB7C2D0),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     title,
                     style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: selected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+                      color: selected ? Colors.white : const Color(0xFFD4DCE6),
+                      fontSize: compact ? 12 : 13,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                 ),
                 if (selected)
-                  const Icon(
-                    Icons.circle,
-                    size: 7,
-                    color: Colors.tealAccent,
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFCCFBF1),
+                      shape: BoxShape.circle,
+                    ),
                   ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Dashboard extends StatelessWidget {
+  final VoidCallback onOpenNotes;
+  final VoidCallback onOpenVehicles;
+  final VoidCallback onOpenCash;
+  final VoidCallback onOpenDrivers;
+  final VoidCallback onOpenAssistants;
+
+  const _Dashboard({
+    required this.onOpenNotes,
+    required this.onOpenVehicles,
+    required this.onOpenCash,
+    required this.onOpenDrivers,
+    required this.onOpenAssistants,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final dateLabel =
+        '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth < 900 ? 22.0 : 36.0;
+
+        return Container(
+          color: _pageBackground,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              30,
+              horizontalPadding,
+              32,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Kontrol Merkezi',
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.7,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            'Sakarya SEV yönetim paneline hoş geldiniz.',
+                            style: TextStyle(
+                              color: _textSecondary.withOpacity(0.95),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _cardBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _cardBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 16,
+                            color: _accent,
+                          ),
+                          const SizedBox(width: 9),
+                          Text(
+                            dateLabel,
+                            style: const TextStyle(
+                              color: _textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 26),
+
+                const SizedBox(height: 24),
+                const _SectionHeading(
+                  title: 'Hızlı Erişim',
+                  subtitle: 'Sık kullanılan işlemlere tek tıkla ulaşın.',
+                ),
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, cardConstraints) {
+                    final compact = cardConstraints.maxWidth < 760;
+                    final cards = [
+                      _ShortcutData(
+                        title: 'Araçlar',
+                        description: 'Araç kayıtları ve yönetimi',
+                        icon: Icons.directions_bus_rounded,
+                        color: const Color(0xFF2563EB),
+                        onTap: onOpenVehicles,
+                      ),
+                      _ShortcutData(
+                        title: 'Notlar',
+                        description: 'Notları ve hatırlatmaları görüntüle',
+                        icon: Icons.sticky_note_2_rounded,
+                        color: const Color(0xFF7C3AED),
+                        onTap: onOpenNotes,
+                      ),
+                      _ShortcutData(
+                        title: 'Gün Sonu Kasa',
+                        description: 'Kasa işlemlerine geçiş yap',
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: _accent,
+                        onTap: onOpenCash,
+                      ),
+                    ];
+
+                    if (compact) {
+                      return Column(
+                        children: cards
+                            .map(
+                              (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _ShortcutCard(data: item),
+                          ),
+                        )
+                            .toList(),
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 14),
+                          Expanded(child: _ShortcutCard(data: cards[i])),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 26),
+                LayoutBuilder(
+                  builder: (context, contentConstraints) {
+                    final narrow = contentConstraints.maxWidth < 850;
+                    final notes = _RecentNotesCard(onOpenNotes: onOpenNotes);
+
+                    if (narrow) {
+                      return Column(
+                        children: [
+                          notes,
+                          const SizedBox(height: 18),
+                          const _TrioEventsCard(),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 6, child: notes),
+                        const SizedBox(width: 18),
+                        const Expanded(flex: 5, child: _TrioEventsCard()),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 26),
+                const _SectionHeading(
+                  title: 'Personel Yönetimi',
+                  subtitle: 'Şoför ve muavin kayıtlarına hızlıca erişin.',
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SmallActionCard(
+                        icon: Icons.airline_seat_recline_normal_rounded,
+                        title: 'Şoförler',
+                        onTap: onOpenDrivers,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _SmallActionCard(
+                        icon: Icons.badge_outlined,
+                        title: 'Muavinler',
+                        onTap: onOpenAssistants,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WelcomeBanner extends StatelessWidget {
+  final VoidCallback onOpenVehicles;
+
+  const _WelcomeBanner({required this.onOpenVehicles});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF123B4A), Color(0xFF0D9488)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _accent.withOpacity(0.15),
+            blurRadius: 22,
+            offset: const Offset(0, 9),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.13),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'YÖNETİM PANELİ',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  'Her şey kontrol altında.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Araçlarınızı, notlarınızı ve günlük işlemlerinizi tek ekrandan yönetin.',
+                  style: TextStyle(
+                    color: Color(0xFFE0F2F1),
+                    fontSize: 12,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                TextButton.icon(
+                  onPressed: onOpenVehicles,
+                  style: TextButton.styleFrom(
+                    backgroundColor: const Color(0xFFD5E3ED),
+                    foregroundColor: const Color(0xFF115E59),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+                  label: const Text(
+                    'Araç yönetimine git',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          Container(
+            width: 112,
+            height: 112,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white.withOpacity(0.13)),
+            ),
+            child: const Icon(
+              Icons.directions_bus_filled_rounded,
+              color: Color(0xFFD5FFFA),
+              size: 65,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _SectionHeading({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: _textPrimary,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          subtitle,
+          style: const TextStyle(color: _textSecondary, fontSize: 12),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShortcutData {
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ShortcutData({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+}
+
+class _ShortcutCard extends StatelessWidget {
+  final _ShortcutData data;
+
+  const _ShortcutCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _cardBackground,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 118),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _cardBorder),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: data.color.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(data.icon, color: data.color, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      data.title,
+                      style: const TextStyle(
+                        color: _textPrimary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      data.description,
+                      style: const TextStyle(
+                        color: _textSecondary,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_outward_rounded,
+                color: Color(0xFF9AA6B2),
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentNotesCard extends StatelessWidget {
+  final VoidCallback onOpenNotes;
+
+  const _RecentNotesCard({required this.onOpenNotes});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<void>(
+      stream: NoteService.instance.changes,
+      builder: (context, snapshot) {
+        final notes = NoteService.instance.getRecentNotes(limit: 5);
+
+        return _PanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _IconBadge(
+                    icon: Icons.sticky_note_2_rounded,
+                    color: Color(0xFF7C3AED),
+                  ),
+                  const SizedBox(width: 11),
+                  const Expanded(
+                    child: Text(
+                      'Son Notlar',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onOpenNotes,
+                    child: const Text('Tümünü gör'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(color: _cardBorder),
+              if (notes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.note_add_outlined,
+                          color: Color(0xFFB7C2D0),
+                          size: 34,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Henüz not eklenmemiş.',
+                          style: TextStyle(color: _textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...notes.map(
+                      (note) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: note.isImportant
+                                ? const Color(0xFFFFF4D6)
+                                : const Color(0xFFE3EAF2),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Icon(
+                            note.isImportant
+                                ? Icons.star_rounded
+                                : note.vehicleId != null
+                                ? Icons.directions_bus_rounded
+                                : Icons.notes_rounded,
+                            color: note.isImportant
+                                ? const Color(0xFFD97706)
+                                : const Color(0xFF64748B),
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                note.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                [
+                                  note.content,
+                                  if (note.vehiclePlate != null)
+                                    'Araç: ${note.vehiclePlate}',
+                                  if (note.reminderAt != null)
+                                    'Hatırlatma: ${note.reminderAt!.toLocal()}',
+                                ].join(' • '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 11,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+class _TrioEventsCard extends StatelessWidget {
+  const _TrioEventsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<TrioDashboardEvent>>(
+      valueListenable:
+      TrioNotificationService.instance.dashboardEvents,
+      builder: (context, events, _) {
+        return _PanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _IconBadge(
+                    icon: Icons.notifications_active_rounded,
+                    color: Color(0xFFD97706),
+                  ),
+                  const SizedBox(width: 11),
+                  const Expanded(
+                    child: Text(
+                      'TRIO Olayları & Bildirimler',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (events.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEDD5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${events.length} olay',
+                        style: const TextStyle(
+                          color: Color(0xFF9A3412),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(color: _cardBorder),
+              if (events.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.radar_rounded,
+                          color: Color(0xFFB7C2D0),
+                          size: 34,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Aktif olay bulunmuyor.',
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...events.take(8).map((event) {
+                  final time = event.receivedAt;
+                  final timeLabel =
+                      '${time.hour.toString().padLeft(2, '0')}:'
+                      '${time.minute.toString().padLeft(2, '0')}:'
+                      '${time.second.toString().padLeft(2, '0')}';
+
+                  final icon = switch (event.type) {
+                    TrioEventType.speed =>
+                    Icons.speed_rounded,
+                    TrioEventType.ignition =>
+                    Icons.key_rounded,
+                    TrioEventType.idle =>
+                    Icons.local_shipping_rounded,
+                    TrioEventType.region =>
+                    Icons.location_on_rounded,
+                  };
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFEDD5),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Icon(
+                            icon,
+                            color: const Color(0xFFD97706),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                event.plate,
+                                style: const TextStyle(
+                                  color: _textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                event.typeLabel,
+                                style: const TextStyle(
+                                  color: Color(0xFFB45309),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                event.message,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 11,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          timeLabel,
+                          style: const TextStyle(
+                            color: _textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+class _SmallActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _SmallActionCard({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _cardBackground,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _cardBorder),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _accent.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: _accent, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Color(0xFF9AA6B2),
+                size: 14,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PanelCard extends StatelessWidget {
+  final Widget child;
+
+  const _PanelCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _cardBorder),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+
+  const _IconBadge({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }
