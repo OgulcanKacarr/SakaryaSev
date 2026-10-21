@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../models/Note/Note.dart';
 import '../../../models/Vehicle/Vehicle.dart';
 import '../../../services/NoteService/NoteService.dart';
+import '../../../services/ReminderService/ReminderService.dart';
 import '../../../services/VehicleService/VehicleService.dart';
 
 
@@ -71,6 +72,7 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   Future<void> _openEditor({Note? note}) async {
+
     final titleController = TextEditingController(
       text: note?.title ?? '',
     );
@@ -340,7 +342,8 @@ class _NotesPageState extends State<NotesPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notlar'),
+        backgroundColor: Colors.black,
+        title: const Text('Notlar',style: TextStyle(color: Colors.greenAccent,fontWeight: FontWeight.bold),),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),

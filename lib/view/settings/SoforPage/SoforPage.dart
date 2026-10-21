@@ -21,6 +21,7 @@ class SoforPage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Başlık Alanı
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -43,22 +44,88 @@ class SoforPage extends ConsumerWidget {
                   ),
                 ],
               ),
-              FilledButton.icon(
-                onPressed: vm.yukleniyor
-                    ? null
-                    : () => _soforFormuAc(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text('Şoför Ekle'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF00796B),
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
+
+              // Şoför Ekle Butonuna Basınca Alta Açılan Menü (PopupMenuButton)
+              PopupMenuButton<String>(
+                enabled: !vm.yukleniyor,
+                offset: const Offset(0, 50), // Butonun hemen altında açılması için offset
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'ekle',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_rounded, color: Color(0xFF00796B), size: 20),
+                        SizedBox(width: 12),
+                        Text('Şoför Ekle', style: TextStyle(fontWeight: FontWeight.w600, )),
+                      ],
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  const PopupMenuItem(
+                    value: 'ice_aktar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.file_upload_outlined, color: Colors.blueAccent, size: 20),
+                        SizedBox(width: 12),
+                        Text('İçe Aktar', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'disa_aktar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.file_download_outlined, color: Colors.orangeAccent, size: 20),
+                        SizedBox(width: 12),
+                        Text('Dışa Aktar', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (value) async {
+                  if (value == 'ekle') {
+                    _soforFormuAc(context, ref);
+                  } else if (value == 'ice_aktar') {
+                    final mesaj = await ref.read(soforProvider).iceAktar();
+                    if (!context.mounted || mesaj == null) return;
+                    ScaffoldMessenger.of(context)
+                      ..clearSnackBars()
+                      ..showSnackBar(
+                        SnackBar(
+                          content: Text(mesaj),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                  } else if (value == 'disa_aktar') {
+                    final mesaj = await ref.read(soforProvider).disaAktar();
+                    if (!context.mounted || mesaj == null) return;
+                    ScaffoldMessenger.of(context)
+                      ..clearSnackBars()
+                      ..showSnackBar(
+                        SnackBar(
+                          content: Text(mesaj),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                  }
+                },
+                child: FilledButton.icon(
+                  onPressed: null, // PopupMenuButton tıklamayı kendi yönettiği için null bırakılır
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Şoför İşlemleri', style: TextStyle(color: Colors.greenAccent),),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF00796B),
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),

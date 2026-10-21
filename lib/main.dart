@@ -1,4 +1,6 @@
 import 'package:arac_takip/services/DatabaseService/DatabaseService.dart';
+import 'package:arac_takip/services/NoteService/NoteService.dart';
+import 'package:arac_takip/services/ReminderService/ReminderService.dart';
 import 'package:arac_takip/services/SharedPrefService/SharedPrefService.dart';
 import 'package:arac_takip/services/TrioListenerService/TrioListenerService.dart';
 import 'package:arac_takip/view/SplashPage.dart';
@@ -11,17 +13,35 @@ import 'constants/AppPagePath.dart';
 import 'constants/AppThemes.dart';
 
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final bool isFirstLaunch =
-  await _checkFirstLaunch();
+  final bool isFirstLaunch = await _checkFirstLaunch();
 
   try {
-    DatabaseService.instance.database;
-    await TrioListenerService.instance.start(port: 5000);
+    // Veritabanını hazırla.
+    await DatabaseService.instance.database;
+
+    // Bildirim altyapısını başlat.
+    await ReminderService.instance.initialize();
+
+    // Kayıtlı notların hatırlatmalarını yeniden planla.
+    await ReminderService.instance.rescheduleAll(
+      NoteService.instance.getAllNotes(),
+    );
   } catch (e, stackTrace) {
-    debugPrint('Veritabanı başlatma hatası: $e');
+    debugPrint('Veritabanı / hatırlatma başlatma hatası: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+
+  try {
+    // TRIO sunucusunu uygulama açılırken dinlemeye başla.
+    TrioListenerService.instance.start(
+      interval: const Duration(seconds: 10),
+    );
+  } catch (e, stackTrace) {
+    debugPrint('TRIO dinleyici başlatma hatası: $e');
     debugPrintStack(stackTrace: stackTrace);
   }
 
@@ -31,6 +51,7 @@ Future<void> main() async {
     ),
   );
 }
+
 
 Future<bool> _checkFirstLaunch() async {
   final bool isFirstLaunch =

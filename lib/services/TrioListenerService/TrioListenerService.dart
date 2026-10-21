@@ -1,130 +1,93 @@
-
+import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http; // http paketini kullandığınızı varsayıyoruz
 
 import '../TrioNotificationService/TrioNotificationService.dart';
 import '../VehicleService/VehicleService.dart';
-
 
 class TrioListenerService {
   TrioListenerService._();
 
   static final TrioListenerService instance = TrioListenerService._();
 
-  HttpServer? _server;
+  Timer? _pollingTimer;
+  bool _isRunning = false;
 
-  bool get isRunning => _server != null;
+  bool get isRunning => _isRunning;
 
-  Future<void> start({int port = 5000}) async {
-    if (_server != null) {
-      debugPrint('TRIO dinleyicisi zaten çalışıyor.');
+  final String _phpEndpoint = 'https://www.sakaryasevturizm.com/acswhook';
+  final String _authKey = '362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c';
+
+  final Set<String> _processedIds = {};
+
+  /// Belirli aralıklarla (örn: her 10 saniyede bir) PHP sunucusunu kontrol eder
+  void start({Duration interval = const Duration(seconds: 10)}) {
+    if (_isRunning) {
+      debugPrint('TRIO sunucu dinleyicisi zaten çalışıyor.');
       return;
     }
 
+    _isRunning = true;
+    debugPrint('TRIO web dinleyicisi başlatıldı.');
+
+    // İlk açılışta hemen kontrol et
+    _fetchAndProcessEvents();
+
+    // Periyodik kontrolü başlat
+    _pollingTimer = Timer.periodic(interval, (timer) async {
+      await _fetchAndProcessEvents();
+    });
+  }
+
+  Future<void> _fetchAndProcessEvents() async {
     try {
-      _server = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        port,
-      );
-
-
-
-      _server!.listen(
-        _handleRequest,
-        onError: (Object error) {
-          debugPrint('TRIO HTTP dinleyici hatası: $error');
+      final response = await http.get(
+        Uri.parse(_phpEndpoint),
+        headers: {
+          'Authorization': 'Bearer $_authKey',
+          'Content-Type': 'application/json',
         },
       );
-    } catch (e, stackTrace) {
-      debugPrint('TRIO dinleyicisi başlatılamadı: $e');
-      debugPrintStack(stackTrace: stackTrace);
-      _server = null;
-      rethrow;
-    }
-  }
 
-  Future<void> _handleRequest(HttpRequest request) async {
-    debugPrint(
-      'HTTP istek alındı: ${request.method} ${request.uri.path}',
-    );
+      if (response.statusCode == 200) {
+        final dynamic decoded = jsonDecode(response.body);
 
-    request.response.headers.contentType = ContentType.json;
+        if (decoded is List) {
+          for (var item in decoded) {
+            if (item is Map && item.containsKey('id') && item.containsKey('data')) {
+              final String id = item['id'].toString();
 
-    try {
-      if (request.method == 'GET' &&
-          request.uri.path == '/health') {
-        request.response.statusCode = HttpStatus.ok;
-        request.response.write(
-          jsonEncode({
-            'status': 'ok',
-            'service': 'TrioListenerService',
-          }),
-        );
-      } else if (request.method == 'POST' &&
-          request.uri.path == '/webhook') {
-        final body = await utf8.decoder.bind(request).join();
+              // Eğer bu olayı daha önce işlemediysek işleme al
+              if (!_processedIds.contains(id)) {
+                _processedIds.add(id);
 
-        final dynamic decoded = jsonDecode(body);
+                final event = Map<String, dynamic>.from(item['data']);
 
-        if (decoded is! Map) {
-          request.response.statusCode = HttpStatus.badRequest;
-          request.response.write(
-            jsonEncode({
-              'success': false,
-              'message': 'Webhook içeriği JSON nesnesi olmalıdır.',
-            }),
-          );
-          return;
+                // Mevcut araç–TRIO eşleştirmesi
+                VehicleService.instance.autoMatchTrioEvent(event);
+
+                // TRIO olayını seslendir ve/veya bildir
+                await TrioNotificationService.instance.handleEvent(event);
+
+                debugPrint('Yeni TRIO olayı işlendi: $id');
+              }
+            }
+          }
         }
-
-        final event = Map<String, dynamic>.from(decoded);
-
-        // Mevcut araç–TRIO eşleştirmesi aynen korunuyor.
-        VehicleService.instance.autoMatchTrioEvent(event);
-
-        // Yeni: TRIO olayını ayarlara göre seslendir ve/veya bildir.
-        await TrioNotificationService.instance.handleEvent(event);
-
-        request.response.statusCode = HttpStatus.ok;
-        request.response.write(
-          jsonEncode({
-            'success': true,
-            'message': 'TRIO olayı alındı.',
-          }),
-        );
       } else {
-        request.response.statusCode = HttpStatus.notFound;
-        request.response.write(
-          jsonEncode({
-            'success': false,
-            'message': 'Adres bulunamadı.',
-          }),
-        );
+        debugPrint('TRIO verileri alınamadı. HTTP Kod: ${response.statusCode}');
       }
     } catch (e, stackTrace) {
-      debugPrint('TRIO HTTP istek işleme hatası: $e');
+      debugPrint('TRIO veri çekme hatası: $e');
       debugPrintStack(stackTrace: stackTrace);
-
-      request.response.statusCode = HttpStatus.badRequest;
-      request.response.write(
-        jsonEncode({
-          'success': false,
-          'message': 'İstek işlenemedi.',
-        }),
-      );
-    } finally {
-      await request.response.close();
     }
   }
 
-  Future<void> stop() async {
-    final server = _server;
-    if (server == null) return;
-
-    await server.close(force: true);
-    _server = null;
-
-
+  void stop() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _isRunning = false;
+    debugPrint('TRIO web dinleyicisi durduruldu.');
   }
 }

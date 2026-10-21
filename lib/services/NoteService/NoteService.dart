@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/Note/Note.dart';
 import '../DatabaseService/DatabaseService.dart';
+import '../ReminderService/ReminderService.dart';
 
 class NoteService {
   NoteService._();
@@ -225,6 +226,9 @@ class NoteService {
     );
 
     final id = db.lastInsertRowId;
+
+    _syncReminder(id, note);
+
     _notifyChanged();
     return id;
   }
@@ -261,7 +265,7 @@ class NoteService {
         note.id,
       ],
     );
-
+    _syncReminder(note.id!, note);
     _notifyChanged();
   }
 
@@ -270,9 +274,55 @@ class NoteService {
       'DELETE FROM notes WHERE id = ?',
       [id],
     );
-
+    _cancelReminderSafely(id);
     _notifyChanged();
   }
+
+
+  void _syncReminder(int id, Note note) {
+    unawaited(
+      _applyReminder(id, note).catchError(
+            (Object error, StackTrace stackTrace) {
+          debugPrint('Hatırlatma güncelleme hatası: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        },
+      ),
+    );
+  }
+
+  Future<void> _applyReminder(int id, Note note) async {
+    final reminderAt = note.reminderAt;
+
+    if (reminderAt == null || note.isCompleted) {
+      await ReminderService.instance.cancelReminder(id);
+      return;
+    }
+
+    await ReminderService.instance.scheduleReminder(
+      notificationId: id,
+      title: note.title,
+      body: note.content.trim().isEmpty
+          ? note.title
+          : '${note.title}\n${note.content.trim()}',
+      reminderAt: reminderAt,
+    );
+  }
+
+  void _cancelReminderSafely(int id) {
+    unawaited(
+      ReminderService.instance.cancelReminder(id).catchError(
+            (Object error, StackTrace stackTrace) {
+          debugPrint('Hatırlatma iptal hatası: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        },
+      ),
+    );
+  }
+
+
+
+
+
 
   void toggleCompleted(Note note) {
     updateNote(

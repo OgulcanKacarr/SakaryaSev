@@ -43,22 +43,83 @@ class MuavinPage extends ConsumerWidget {
                   ),
                 ],
               ),
-              FilledButton.icon(
-                onPressed: vm.yukleniyor
-                    ? null
-                    : () => _muavinFormuAc(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text('Muavin Ekle'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF00796B),
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
+              // Açılır Kapanır Menü (PopupMenuButton) ile Ekle, İçe ve Dışa Aktar Butonları
+              PopupMenuButton<String>(
+                enabled: !vm.yukleniyor,
+                offset: const Offset(0, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'ekle',
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_rounded, color: Color(0xFF00796B), size: 20),
+                        SizedBox(width: 12),
+                        Text('Muavin Ekle', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  const PopupMenuItem(
+                    value: 'ice_aktar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.upload_file_rounded, color: Colors.blueAccent, size: 20),
+                        SizedBox(width: 12),
+                        Text('İçe Aktar', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'disa_aktar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.download_rounded, color: Colors.orangeAccent, size: 20),
+                        SizedBox(width: 12),
+                        Text('Dışa Aktar', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (value) async {
+                  if (value == 'ekle') {
+                    _muavinFormuAc(context, ref);
+                  } else if (value == 'ice_aktar') {
+                    final hata = await ref.read(muavinProvider).iceAktarDosyadan();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(hata ?? 'Muavinler başarıyla içe aktarıldı.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } else if (value == 'disa_aktar') {
+                    final hata = await ref.read(muavinProvider).disaAktarMasaustune();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(hata ?? 'Muavinler masaüstüne başarıyla dışa aktarıldı.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+                child: FilledButton.icon(
+                  onPressed: null, // PopupMenuButton tarafından yönetiliyor
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('Muavin İşlemleri',style: TextStyle(color: Colors.greenAccent,)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF00796B),
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),
@@ -277,7 +338,6 @@ class MuavinPage extends ConsumerWidget {
           rows: muavinler.map((muavin) {
             return DataRow(
               cells: [
-                // Ad Soyad Kopyalama
                 DataCell(
                   InkWell(
                     onTap: () => _panoyaKopyala(context, muavin.tamAd, 'Ad Soyad'),
@@ -308,8 +368,6 @@ class MuavinPage extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                // Telefon Kopyalama
                 DataCell(
                   InkWell(
                     onTap: () => _panoyaKopyala(context, muavin.telefon, 'Telefon'),
@@ -327,8 +385,6 @@ class MuavinPage extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                // T.C. Maskeli Gösterim & Tam Halini Kopyalama
                 DataCell(
                   InkWell(
                     onTap: () => _panoyaKopyala(context, muavin.tc, 'T.C. Kimlik No'),
@@ -349,8 +405,6 @@ class MuavinPage extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                // İşlemler
                 DataCell(
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -398,7 +452,17 @@ class MuavinPage extends ConsumerWidget {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$alanAdi panoya kopyalandı: $veri'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), ), ); }    String _tcMaskele(String tc) { if (tc.length != 11) return '***********'; return '${tc.substring(0, 3)}*****${tc.substring(8)}';
+        content: Text('$alanAdi panoya kopyalandı: $veri'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  String _tcMaskele(String tc) {
+    if (tc.length != 11) return '***********';
+    return '${tc.substring(0, 3)}*****${tc.substring(8)}';
   }
 
   void _muavinFormuAc(
@@ -536,7 +600,7 @@ class MuavinPage extends ConsumerWidget {
           ),
         ],
       ),
-    ); // <-- `.then(...)` bloğu ve içindeki controller dispose işlemleri tamamen kaldırıldı.
+    );
   }
 
   Widget _alan(
