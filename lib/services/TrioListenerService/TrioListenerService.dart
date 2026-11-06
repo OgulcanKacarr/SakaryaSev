@@ -1,93 +1,143 @@
+
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http; // http paketini kullandığınızı varsayıyoruz
+import 'package:http/http.dart' as http;
 
 import '../TrioNotificationService/TrioNotificationService.dart';
 import '../VehicleService/VehicleService.dart';
 
 class TrioListenerService {
-  TrioListenerService._();
+TrioListenerService._();
 
-  static final TrioListenerService instance = TrioListenerService._();
+static final TrioListenerService instance = TrioListenerService._();
 
-  Timer? _pollingTimer;
-  bool _isRunning = false;
+Timer? _pollingTimer;
+bool _isRunning = false;
+bool _isFetching = false;
+bool _initialSyncCompleted = false;
 
-  bool get isRunning => _isRunning;
+bool get isRunning => _isRunning;
 
-  final String _phpEndpoint = 'https://www.sakaryasevturizm.com/acswhook';
-  final String _authKey = '362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c';
+final String _phpEndpoint =
+'https://www.sakaryasevturizm.com/acswhook';
 
-  final Set<String> _processedIds = {};
+final String _authKey = '362a98b7604b2ebf1c2aaf5c7f621e507f55b576a398eb6c';
 
-  /// Belirli aralıklarla (örn: her 10 saniyede bir) PHP sunucusunu kontrol eder
-  void start({Duration interval = const Duration(seconds: 10)}) {
-    if (_isRunning) {
-      debugPrint('TRIO sunucu dinleyicisi zaten çalışıyor.');
-      return;
-    }
+final Set<String> _processedIds = {};
 
-    _isRunning = true;
-    debugPrint('TRIO web dinleyicisi başlatıldı.');
+void start({Duration interval = const Duration(seconds: 10)}) {
+if (_isRunning) {
+debugPrint('TRIO dinleyicisi zaten çalışıyor.');
+return;
+}
 
-    // İlk açılışta hemen kontrol et
-    _fetchAndProcessEvents();
+_isRunning = true;
+debugPrint('TRIO dinleyicisi başlatıldı.');
 
-    // Periyodik kontrolü başlat
-    _pollingTimer = Timer.periodic(interval, (timer) async {
-      await _fetchAndProcessEvents();
-    });
-  }
+_fetchAndProcessEvents();
 
-  Future<void> _fetchAndProcessEvents() async {
-    try {
-      final response = await http.get(
-        Uri.parse(_phpEndpoint),
-        headers: {
-          'Authorization': 'Bearer $_authKey',
-          'Content-Type': 'application/json',
-        },
-      );
+_pollingTimer = Timer.periodic(interval, (_) {
+_fetchAndProcessEvents();
+});
+}
 
-      if (response.statusCode == 200) {
-        final dynamic decoded = jsonDecode(response.body);
+Future<void> _fetchAndProcessEvents() async {
+if (_isFetching) return;
+_isFetching = true;
 
-        if (decoded is List) {
-          for (var item in decoded) {
-            if (item is Map && item.containsKey('id') && item.containsKey('data')) {
-              final String id = item['id'].toString();
+try {
+debugPrint('TRIO: Sunucu kontrol ediliyor...');
 
-              // Eğer bu olayı daha önce işlemediysek işleme al
-              if (!_processedIds.contains(id)) {
-                _processedIds.add(id);
+final response = await http
+    .get(
+Uri.parse(_phpEndpoint),
+headers: {
+'Authorization': 'Bearer $_authKey',
+'Accept': 'application/json',
+},
+)
+    .timeout(const Duration(seconds: 15));
 
-                final event = Map<String, dynamic>.from(item['data']);
+debugPrint('TRIO HTTP durum kodu: ${response.statusCode}');
 
-                // Mevcut araç–TRIO eşleştirmesi
-                VehicleService.instance.autoMatchTrioEvent(event);
 
-                // TRIO olayını seslendir ve/veya bildir
-                await TrioNotificationService.instance.handleEvent(event);
+if (response.statusCode != 200) {
+debugPrint('TRIO: Sunucu isteği başarısız.');
+return;
+}
 
-                debugPrint('Yeni TRIO olayı işlendi: $id');
-              }
-            }
-          }
-        }
-      } else {
-        debugPrint('TRIO verileri alınamadı. HTTP Kod: ${response.statusCode}');
-      }
-    } catch (e, stackTrace) {
-      debugPrint('TRIO veri çekme hatası: $e');
-      debugPrintStack(stackTrace: stackTrace);
-    }
-  }
+final dynamic decoded = jsonDecode(response.body);
 
-  void stop() {
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
-    _isRunning = false;
-    debugPrint('TRIO web dinleyicisi durduruldu.');
-  }
+if (decoded is! List) {
+debugPrint(
+'TRIO HATASI: Beklenen JSON liste biçimi değil. '
+'Gelen tip: ${decoded.runtimeType}',
+);
+return;
+}
+
+debugPrint('TRIO: Sunucuda ${decoded.length} kayıt bulundu.');
+
+// İlk sorgudaki kayıtları geçmiş kayıt olarak işaretle.
+if (!_initialSyncCompleted) {
+for (final item in decoded) {
+if (item is Map && item['id'] != null) {
+_processedIds.add(item['id'].toString());
+}
+}
+
+_initialSyncCompleted = true;
+
+debugPrint(
+'TRIO ilk senkronizasyon tamamlandı. '
+'${_processedIds.length} mevcut kayıt atlandı.',
+);
+return;
+}
+
+for (final item in decoded) {
+if (item is! Map ||
+item['id'] == null ||
+item['data'] is! Map) {
+debugPrint('TRIO: Geçersiz kayıt biçimi atlandı: $item');
+continue;
+}
+
+final id = item['id'].toString();
+
+if (_processedIds.contains(id)) continue;
+
+final event = Map<String, dynamic>.from(item['data'] as Map);
+
+debugPrint('TRIO: Yeni olay bulundu: $id');
+
+try {
+VehicleService.instance.autoMatchTrioEvent(event);
+await TrioNotificationService.instance.handleEvent(event);
+
+_processedIds.add(id);
+debugPrint('TRIO: Olay işlendi: $id');
+} catch (e, stackTrace) {
+debugPrint('TRIO olay işleme hatası ($id): $e');
+debugPrintStack(stackTrace: stackTrace);
+}
+}
+} on TimeoutException {
+debugPrint('TRIO: Sunucu isteği zaman aşımına uğradı.');
+} catch (e, stackTrace) {
+debugPrint('TRIO veri çekme hatası: $e');
+debugPrintStack(stackTrace: stackTrace);
+} finally {
+_isFetching = false;
+}
+}
+
+void stop() {
+_pollingTimer?.cancel();
+_pollingTimer = null;
+_isRunning = false;
+debugPrint('TRIO dinleyicisi durduruldu.');
+}
 }

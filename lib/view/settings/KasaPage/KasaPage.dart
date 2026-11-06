@@ -6,9 +6,87 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:imclipboard/imclipboard.dart';
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/KasaViewModel/KasaViewModel.dart';
+
+// Sayıları Türkçe biçimde gösterir: 1.234.567,89
+String _binlikFormat(double value, {int ondalik = 2}) {
+  final negatif = value < 0;
+  final sabit = value.abs().toStringAsFixed(ondalik);
+  final parcalar = sabit.split('.');
+  final rakamlar = parcalar[0].split('').reversed.toList();
+  final gruplu = StringBuffer();
+
+  for (var i = 0; i < rakamlar.length; i++) {
+    if (i > 0 && i % 3 == 0) {
+      gruplu.write('.');
+    }
+    gruplu.write(rakamlar[i]);
+  }
+
+  final tamKisim = gruplu.toString().split('').reversed.join();
+  final ondalikKisim = ondalik > 0 ? ',${parcalar[1]}' : '';
+  return '${negatif ? '-' : ''}$tamKisim$ondalikKisim';
+}
+
+
+// Gelir/gider alanlarında yazarken binlik ayıracı ekler.
+// Nokta binlik ayıracı, virgül ise ondalık ayıracı olarak kullanılır.
+class _BinlikTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    var raw = newValue.text.replaceAll('.', '');
+    raw = raw.replaceAll(RegExp(r'[^0-9,]'), '');
+
+    final commaIndex = raw.indexOf(',');
+    if (commaIndex != -1) {
+      raw = raw.substring(0, commaIndex + 1) +
+          raw.substring(commaIndex + 1).replaceAll(',', '');
+    }
+
+    final parts = raw.split(',');
+    final reversedDigits = parts[0].split('').reversed.toList();
+    final grouped = StringBuffer();
+
+    for (var i = 0; i < reversedDigits.length; i++) {
+      if (i > 0 && i % 3 == 0) grouped.write('.');
+      grouped.write(reversedDigits[i]);
+    }
+
+    final integerPart = grouped.toString().split('').reversed.join();
+    final formatted = parts.length > 1
+        ? '$integerPart,${parts[1]}'
+        : integerPart;
+
+    // İmlecin, binlik noktaları eklendikten sonra mantıklı konumda kalmasını sağlar.
+    final oldCursor = newValue.selection.baseOffset.clamp(0, newValue.text.length);
+    final meaningfulBeforeCursor = newValue.text
+        .substring(0, oldCursor)
+        .replaceAll('.', '')
+        .replaceAll(RegExp(r'[^0-9,]'), '')
+        .length;
+
+    var cursor = 0;
+    var meaningfulCount = 0;
+    while (cursor < formatted.length &&
+        meaningfulCount < meaningfulBeforeCursor) {
+      if (formatted[cursor] != '.') meaningfulCount++;
+      cursor++;
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: cursor),
+      composing: TextRange.empty,
+    );
+  }
+}
 
 class KasaPage extends ConsumerWidget {
   KasaPage({super.key});
@@ -23,8 +101,7 @@ class KasaPage extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    String para(double val) =>
-        '${val.toStringAsFixed(2).replaceAll('.', ',')} ₺';
+    String para(double val) => '${_binlikFormat(val)} ₺';
 
     return RepaintBoundary(
       key: _printKey,
@@ -611,7 +688,7 @@ class KasaPage extends ConsumerWidget {
       buffer.writeln('Kalem;Tutar');
 
       for (final g in vm.gelirler) {
-        buffer.writeln('${g.baslik};${g.tutar.toStringAsFixed(2)}');
+        buffer.writeln('${g.baslik};${_binlikFormat(g.tutar)}');
       }
 
       buffer.writeln();
@@ -619,18 +696,18 @@ class KasaPage extends ConsumerWidget {
       buffer.writeln('Kalem;Tutar');
 
       for (final g in vm.giderler) {
-        buffer.writeln('${g.baslik};${g.tutar.toStringAsFixed(2)}');
+        buffer.writeln('${g.baslik};${_binlikFormat(g.tutar)}');
       }
 
       buffer.writeln();
       buffer.writeln(
-        'TOPLAM GELİR;${vm.toplamGelir.toStringAsFixed(2)}',
+        'TOPLAM GELİR;${_binlikFormat(vm.toplamGelir)}',
       );
       buffer.writeln(
-        'TOPLAM GİDER;${vm.toplamGider.toStringAsFixed(2)}',
+        'TOPLAM GİDER;${_binlikFormat(vm.toplamGider)}',
       );
       buffer.writeln(
-        'NAKİT KALAN;${vm.kalanNakit.toStringAsFixed(2)}',
+        'NAKİT KALAN;${_binlikFormat(vm.kalanNakit)}',
       );
 
       if (vm.aciklama.isNotEmpty) {
@@ -806,7 +883,7 @@ class KasaPage extends ConsumerWidget {
           ).paint(canvas, Offset(40, currentY + 8));
 
           final tutar = createText(
-            '${g.tutar.toStringAsFixed(2).replaceAll('.', ',')} ₺',
+            '${_binlikFormat(g.tutar)} ₺',
             12,
             FontWeight.bold,
             Colors.redAccent,
@@ -846,7 +923,7 @@ class KasaPage extends ConsumerWidget {
           ).paint(canvas, Offset(genislik / 2 + 20, currentY + 8));
 
           final tutar = createText(
-            '${g.tutar.toStringAsFixed(2).replaceAll('.', ',')} ₺',
+            '${_binlikFormat(g.tutar)} ₺',
             12,
             FontWeight.bold,
             Colors.green,
@@ -880,7 +957,7 @@ class KasaPage extends ConsumerWidget {
       );
 
       createText(
-        'TOPLAM GELİR: ${vm.toplamGelir.toStringAsFixed(2).replaceAll('.', ',')} ₺',
+        'TOPLAM GELİR: ${_binlikFormat(vm.toplamGelir)} ₺',
         13,
         FontWeight.bold,
         Colors.green,
@@ -889,7 +966,7 @@ class KasaPage extends ConsumerWidget {
       ).paint(canvas, Offset(50, currentY + 24));
 
       createText(
-        'TOPLAM GİDER: ${vm.toplamGider.toStringAsFixed(2).replaceAll('.', ',')} ₺',
+        'TOPLAM GİDER: ${_binlikFormat(vm.toplamGider)} ₺',
         13,
         FontWeight.bold,
         Colors.redAccent,
@@ -898,7 +975,7 @@ class KasaPage extends ConsumerWidget {
       ).paint(canvas, Offset(320, currentY + 24));
 
       createText(
-        'NAKİT KALAN: ${vm.kalanNakit.toStringAsFixed(2).replaceAll('.', ',')} ₺',
+        'NAKİT KALAN: ${_binlikFormat(vm.kalanNakit)} ₺',
         14,
         FontWeight.bold,
         _anaRenk,
@@ -979,6 +1056,25 @@ class KasaPage extends ConsumerWidget {
       final filePath = p.join(desktopPath, fileName);
 
       await File(filePath).writeAsBytes(pngBytes);
+
+      // WHATSAPP'A GÖNDERME HAZIRLIĞI
+
+// 1. Oluşturulan görseli Windows panosuna kopyala
+      const ImClipboard clipboard = ImClipboard();
+
+      await clipboard.writeImage(
+        pngBytes,
+      );
+
+// 2. Gönderilecek telefon numarası
+      const String telefon = '905302469506';
+      final Uri whatsappUrl = Uri.parse(
+        'whatsapp://send?phone=$telefon',
+      );
+      await launchUrl(
+        whatsappUrl,
+        mode: LaunchMode.externalApplication,
+      );
 
       if (!context.mounted) return;
 
@@ -1125,7 +1221,7 @@ class _KasaInputRowState extends State<_KasaInputRow> {
 
     final yeniText = widget.deger == 0.0
         ? ''
-        : widget.deger.toStringAsFixed(0);
+        : _binlikFormat(widget.deger, ondalik: 0);
 
     if (oldWidget.deger != widget.deger &&
         _controller.text != yeniText &&
@@ -1180,9 +1276,7 @@ class _KasaInputRowState extends State<_KasaInputRow> {
               ),
               textAlign: TextAlign.end,
               inputFormatters: [
-                FilteringTextInputFormatter.allow(
-                  RegExp(r'^\d*[\.,]?\d*'),
-                ),
+                _BinlikTextInputFormatter(),
               ],
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
@@ -1199,8 +1293,10 @@ class _KasaInputRowState extends State<_KasaInputRow> {
                 suffixText: ' ₺',
               ),
               onChanged: (val) {
-                final parsed =
-                    double.tryParse(val.replaceAll(',', '.')) ?? 0.0;
+                final parsed = double.tryParse(
+                  val.replaceAll('.', '').replaceAll(',', '.'),
+                ) ??
+                    0.0;
                 widget.onChanged(parsed);
               },
             ),
